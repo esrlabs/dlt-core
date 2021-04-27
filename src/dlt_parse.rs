@@ -1,0 +1,1083 @@
+// Copyright (c) 2019 E.S.R.Labs. All rights reserved.
+//
+// NOTICE:  All information contained herein is, and remains
+// the property of E.S.R.Labs and its suppliers, if any.
+// The intellectual and technical concepts contained herein are
+// proprietary to E.S.R.Labs and its suppliers and may be covered
+// by German and Foreign Patents, patents in process, and are protected
+// by trade secret or copyright law.
+// Dissemination of this information or reproduction of this material
+// is strictly forbidden unless prior written permission is obtained
+// from E.S.R.Labs.
+// use crate::{dlt::*, filtering};
+use crate::{
+    dlt::{
+        calculate_all_headers_length, float_width_to_type_length, ApplicationTraceType, Argument,
+        ControlType, DltTimeStamp, Endianness, ExtendedHeader, FixedPoint, FixedPointValue,
+        FloatWidth, LogLevel, Message, MessageType, NetworkTraceType, PayloadContent,
+        StandardHeader, StorageHeader, TryFrom, TypeInfo, TypeInfoKind, TypeLength, Value,
+        BIG_ENDIAN_FLAG, STORAGE_HEADER_LENGTH, VERBOSE_FLAG, WITH_ECU_ID_FLAG,
+        WITH_EXTENDED_HEADER_FLAG, WITH_SESSION_ID_FLAG, WITH_TIMESTAMP_FLAG,
+    },
+    filtering,
+};
+use byteorder::{BigEndian, LittleEndian};
+use nom::{
+    bytes::streaming::{tag, take, take_while_m_n},
+    combinator::map,
+    error::{ErrorKind, ParseError},
+    multi::count,
+    number::streaming::{
+        be_f32, be_f64, be_i128, be_i16, be_i32, be_i64, be_i8, be_u128, be_u16, be_u32, be_u64,
+        be_u8, le_f32, le_f64, le_i128, le_i16, le_i32, le_i64, le_u128, le_u16, le_u32, le_u64,
+    },
+    sequence::tuple,
+    Err::Error,
+    IResult,
+};
+use thiserror::Error;
+
+pub const STOP_CHECK_LINE_THRESHOLD: usize = 250_000;
+pub const DLT_READER_CAPACITY: usize = 10 * 1024 * 1024;
+pub const DLT_MIN_BUFFER_SPACE: usize = 10 * 1024;
+pub const DLT_PATTERN_SIZE: usize = 4;
+pub(crate) const DLT_PATTERN: &[u8] = &[0x44, 0x4C, 0x54, 0x01];
+
+pub(crate) fn parse_ecu_id(input: &[u8]) -> IResult<&[u8], &str, DltParseError> {
+    dlt_zero_terminated_string(input, 4)
+}
+
+impl ParseError<&[u8]> for DltParseError {
+    fn from_error_kind(input: &[u8], kind: ErrorKind) -> Self {
+        DltParseError::ParsingHickup(format!(
+            "Nom error: {:?} ({} bytes left)",
+            kind,
+            input.len()
+        ))
+    }
+
+    fn append(_: &[u8], _: ErrorKind, other: Self) -> Self {
+        other
+    }
+}
+
+#[derive(Error, Debug, PartialEq)]
+pub enum DltParseError {
+    #[error("parsing stopped, cannot continue: {0}")]
+    Unrecoverable(String),
+    #[error("parsing error, try to continue: {0}")]
+    ParsingHickup(String),
+    #[error("parsing could not complete: {:?}", needed)]
+    IncompleteParse {
+        needed: Option<std::num::NonZeroUsize>,
+    },
+}
+
+impl From<std::io::Error> for DltParseError {
+    fn from(err: std::io::Error) -> DltParseError {
+        DltParseError::Unrecoverable(format!("{}", err))
+    }
+}
+
+impl From<pcap_parser::PcapError> for DltParseError {
+    fn from(err: pcap_parser::PcapError) -> DltParseError {
+        DltParseError::Unrecoverable(format!("{}", err))
+    }
+}
+
+impl From<nom::Err<DltParseError>> for DltParseError {
+    fn from(ne: nom::Err<DltParseError>) -> Self {
+        nom_to_dlt_parse_error(ne, "")
+    }
+}
+
+impl From<nom::Err<(&[u8], nom::error::ErrorKind)>> for DltParseError {
+    fn from(err: nom::Err<(&[u8], nom::error::ErrorKind)>) -> DltParseError {
+        match err {
+            nom::Err::Incomplete(n) => {
+                let needed = match n {
+                    nom::Needed::Size(s) => Some(s),
+                    nom::Needed::Unknown => None,
+                };
+                DltParseError::IncompleteParse { needed }
+            }
+            nom::Err::Error((input, kind)) => DltParseError::ParsingHickup(format!(
+                "{:?} ({} bytes left in input)",
+                kind,
+                input.len()
+            )),
+            nom::Err::Failure((input, kind)) => DltParseError::Unrecoverable(format!(
+                "{:?} ({} bytes left in input)",
+                kind,
+                input.len()
+            )),
+        }
+    }
+}
+
+/// skip ahead in input array till we reach a storage header
+/// return Some(dropped, rest_slice) that starts with the next storage header (if any)
+/// or None if no more storage header could be found.
+/// dropped is the number of bytes that were skipped
+/// note: we won't skip anything if the input already begins
+/// with a storage header
+pub fn forward_to_next_storage_header(input: &[u8]) -> Option<(u64, &[u8])> {
+    let mut found = false;
+    let mut to_drop = 0usize;
+    for v in input.windows(DLT_PATTERN_SIZE) {
+        if v == DLT_PATTERN {
+            found = true;
+            break;
+        }
+        to_drop += 1;
+    }
+
+    if !found {
+        debug!(
+            "forward but no more storage header (input left {})",
+            input.len()
+        );
+        return None;
+    }
+    if to_drop > 0 {
+        trace!("Need to drop {} bytes to get to next message", to_drop);
+    }
+    trace!("forwarded {}", to_drop);
+    Some((to_drop as u64, &input[to_drop..]))
+}
+
+/// parse the next DLT storage header
+/// this function will move along the content until it finds a storage header
+/// the amount of bytes we had to move forwared is the second part of the return value
+pub(crate) fn dlt_storage_header(
+    input: &[u8],
+) -> IResult<&[u8], Option<(StorageHeader, u64)>, DltParseError> {
+    match forward_to_next_storage_header(input) {
+        Some((consumed, rest)) => {
+            let (input, (_, _, seconds, microseconds)) =
+                tuple((tag("DLT"), tag(&[0x01]), le_u32, le_u32))(rest).map_err(|ne| {
+                    Error(nom_to_dlt_parse_error(
+                        ne,
+                        "Problems trying to parse DLT pattern",
+                    ))
+                })?;
+
+            let (after_string, ecu_id) = dlt_zero_terminated_string(input, 4)?;
+            Ok((
+                after_string,
+                Some((
+                    StorageHeader {
+                        timestamp: DltTimeStamp {
+                            seconds,
+                            microseconds,
+                        },
+                        ecu_id: ecu_id.to_string(),
+                    },
+                    consumed,
+                )),
+            ))
+        }
+        None => {
+            warn!("Did not find another storage header in file");
+            Ok((&[], None))
+        }
+    }
+}
+
+fn maybe_parse_ecu_id(a: bool) -> impl Fn(&[u8]) -> IResult<&[u8], Option<&str>, DltParseError> {
+    fn parse_ecu_id_to_option(input: &[u8]) -> IResult<&[u8], Option<&str>, DltParseError> {
+        let (rest, ecu_id) = parse_ecu_id(input)?;
+        Ok((rest, Some(ecu_id)))
+    }
+    #[allow(clippy::unnecessary_wraps)]
+    fn parse_nothing_str(input: &[u8]) -> IResult<&[u8], Option<&str>, DltParseError> {
+        Ok((input, None))
+    }
+    if a {
+        parse_ecu_id_to_option
+    } else {
+        parse_nothing_str
+    }
+}
+
+fn maybe_parse_u32(a: bool) -> impl Fn(&[u8]) -> IResult<&[u8], Option<u32>, DltParseError> {
+    fn parse_u32_to_option(input: &[u8]) -> IResult<&[u8], Option<u32>, DltParseError> {
+        map(be_u32, Some)(input)
+    }
+    #[allow(clippy::unnecessary_wraps)]
+    fn parse_nothing_u32(input: &[u8]) -> IResult<&[u8], Option<u32>, DltParseError> {
+        Ok((input, None))
+    }
+    if a {
+        parse_u32_to_option
+    } else {
+        parse_nothing_u32
+    }
+}
+
+fn add_context(ne: nom::Err<DltParseError>, desc: String) -> nom::Err<DltParseError> {
+    match ne {
+        nom::Err::Incomplete(n) => nom::Err::Incomplete(n),
+        nom::Err::Error(e) => {
+            nom::Err::Error(DltParseError::ParsingHickup(format!("{}: {}", desc, e)))
+        }
+        nom::Err::Failure(e) => {
+            nom::Err::Error(DltParseError::Unrecoverable(format!("{}: {}", desc, e)))
+        }
+    }
+}
+
+fn nom_to_dlt_parse_error(ne: nom::Err<DltParseError>, desc: &str) -> DltParseError {
+    match ne {
+        nom::Err::Incomplete(nom::Needed::Size(needed)) => DltParseError::IncompleteParse {
+            needed: Some(needed),
+        },
+        nom::Err::Incomplete(nom::Needed::Unknown) => {
+            DltParseError::IncompleteParse { needed: None }
+        }
+        nom::Err::Error(e) => DltParseError::ParsingHickup(format!("{}: {}", desc, e)),
+        nom::Err::Failure(e) => DltParseError::Unrecoverable(format!("{}: {}", desc, e)),
+    }
+}
+
+/// The standard header is part of every DLT message
+/// all big endian format [PRS_Dlt_00091]
+pub(crate) fn dlt_standard_header(input: &[u8]) -> IResult<&[u8], StandardHeader, DltParseError> {
+    let (input, header_type_byte) = be_u8(input)?;
+    let has_ecu_id = (header_type_byte & WITH_ECU_ID_FLAG) != 0;
+    let has_session_id = (header_type_byte & WITH_SESSION_ID_FLAG) != 0;
+    let has_timestamp = (header_type_byte & WITH_TIMESTAMP_FLAG) != 0;
+    let (input, (message_counter, overall_length, ecu_id, session_id, timestamp)) = tuple((
+        be_u8,
+        be_u16,
+        maybe_parse_ecu_id(has_ecu_id),
+        maybe_parse_u32(has_session_id),
+        maybe_parse_u32(has_timestamp),
+    ))(input)
+    .map_err(|ne: nom::Err<DltParseError>| {
+        Error(nom_to_dlt_parse_error(
+            ne,
+            "Problems parsing DLT standard header",
+        ))
+    })?;
+
+    let has_extended_header = (header_type_byte & WITH_EXTENDED_HEADER_FLAG) != 0;
+    let all_headers_length = calculate_all_headers_length(header_type_byte);
+    if all_headers_length > overall_length {
+        return Err(Error(DltParseError::ParsingHickup(
+            "Header indecates wrong message length".to_string(),
+        )));
+    }
+    let payload_length = overall_length - all_headers_length;
+
+    Ok((
+        input,
+        StandardHeader::new(
+            header_type_byte >> 5 & 0b111,
+            if (header_type_byte & BIG_ENDIAN_FLAG) != 0 {
+                Endianness::Big
+            } else {
+                Endianness::Little
+            },
+            message_counter,
+            has_extended_header,
+            payload_length,
+            ecu_id.map(|r| r.to_string()),
+            session_id,
+            timestamp,
+        ),
+    ))
+}
+
+pub(crate) fn dlt_extended_header(input: &[u8]) -> IResult<&[u8], ExtendedHeader, DltParseError> {
+    let (i, (message_info, argument_count, app_id, context_id)) =
+        tuple((be_u8, be_u8, parse_ecu_id, parse_ecu_id))(input)?;
+
+    let verbose = (message_info & VERBOSE_FLAG) != 0;
+    match MessageType::try_from(message_info) {
+        Ok(message_type) => {
+            match message_type {
+                MessageType::Unknown(n) => {
+                    warn!("unknown message type {:?}", n);
+                }
+                MessageType::Log(LogLevel::Invalid(n)) => {
+                    warn!("unknown log level {}", n);
+                }
+                MessageType::Control(ControlType::Unknown(n)) => {
+                    warn!("unknown control type {}", n);
+                }
+                MessageType::ApplicationTrace(ApplicationTraceType::Invalid(n)) => {
+                    warn!("invalid application-trace type {}", n);
+                }
+                MessageType::NetworkTrace(NetworkTraceType::Invalid) => {
+                    warn!("invalid application-trace type 0");
+                }
+                _ => (),
+            };
+            Ok((
+                i,
+                ExtendedHeader {
+                    verbose,
+                    argument_count,
+                    message_type,
+                    application_id: app_id.to_string(),
+                    context_id: context_id.to_string(),
+                },
+            ))
+        }
+        Err(e) => {
+            let msg = format!("invalid message type: {}", e);
+            Err(Error(DltParseError::ParsingHickup(msg)))
+        }
+    }
+}
+
+#[inline]
+pub fn is_not_null(chr: u8) -> bool {
+    chr != 0x0
+}
+
+/// In various places within the DLT message, there can be strings that are
+/// terminated with a \0. This parser extracts the string in a byte sequence
+/// up to the \0 termination character
+pub fn dlt_zero_terminated_string(s: &[u8], size: usize) -> IResult<&[u8], &str, DltParseError> {
+    let (rest_with_null, content_without_null) = take_while_m_n(0, size, is_not_null)(s)?;
+    let res_str = match nom::lib::std::str::from_utf8(content_without_null) {
+        Ok(content) => content,
+        Err(e) => {
+            let (valid, _) = content_without_null.split_at(e.valid_up_to());
+            unsafe { nom::lib::std::str::from_utf8_unchecked(valid) }
+        }
+    };
+    let missing = size - content_without_null.len();
+    let (rest, _) = take(missing)(rest_with_null)?;
+    Ok((rest, res_str))
+}
+
+fn dlt_variable_name<T: NomByteOrder>(input: &[u8]) -> IResult<&[u8], String, DltParseError> {
+    let (i, size) = T::parse_u16(input)?;
+    let (i2, name) = dlt_zero_terminated_string(i, size as usize)?;
+    Ok((i2, name.to_string()))
+}
+
+pub(crate) trait NomByteOrder: Clone + Copy + Eq + Ord + PartialEq + PartialOrd {
+    fn parse_u16(i: &[u8]) -> IResult<&[u8], u16, DltParseError>;
+    fn parse_i16(i: &[u8]) -> IResult<&[u8], i16, DltParseError>;
+    fn parse_u32(i: &[u8]) -> IResult<&[u8], u32, DltParseError>;
+    fn parse_i32(i: &[u8]) -> IResult<&[u8], i32, DltParseError>;
+    fn parse_f32(i: &[u8]) -> IResult<&[u8], f32, DltParseError>;
+    fn parse_u64(i: &[u8]) -> IResult<&[u8], u64, DltParseError>;
+    fn parse_i64(i: &[u8]) -> IResult<&[u8], i64, DltParseError>;
+    fn parse_f64(i: &[u8]) -> IResult<&[u8], f64, DltParseError>;
+    fn parse_u128(i: &[u8]) -> IResult<&[u8], u128, DltParseError>;
+    fn parse_i128(i: &[u8]) -> IResult<&[u8], i128, DltParseError>;
+    fn to_string(input: &[u8], width: usize) -> String;
+}
+
+impl NomByteOrder for BigEndian {
+    #[inline]
+    fn parse_u16(i: &[u8]) -> IResult<&[u8], u16, DltParseError> {
+        be_u16(i)
+    }
+    #[inline]
+    fn parse_i16(i: &[u8]) -> IResult<&[u8], i16, DltParseError> {
+        be_i16(i)
+    }
+    #[inline]
+    fn parse_u32(i: &[u8]) -> IResult<&[u8], u32, DltParseError> {
+        be_u32(i)
+    }
+    #[inline]
+    fn parse_i32(i: &[u8]) -> IResult<&[u8], i32, DltParseError> {
+        be_i32(i)
+    }
+    #[inline]
+    fn parse_f32(i: &[u8]) -> IResult<&[u8], f32, DltParseError> {
+        be_f32(i)
+    }
+    #[inline]
+    fn parse_u64(i: &[u8]) -> IResult<&[u8], u64, DltParseError> {
+        be_u64(i)
+    }
+    #[inline]
+    fn parse_i64(i: &[u8]) -> IResult<&[u8], i64, DltParseError> {
+        be_i64(i)
+    }
+    #[inline]
+    fn parse_f64(i: &[u8]) -> IResult<&[u8], f64, DltParseError> {
+        be_f64(i)
+    }
+    #[inline]
+    fn parse_u128(i: &[u8]) -> IResult<&[u8], u128, DltParseError> {
+        be_u128(i)
+    }
+    #[inline]
+    fn parse_i128(i: &[u8]) -> IResult<&[u8], i128, DltParseError> {
+        be_i128(i)
+    }
+    fn to_string(input: &[u8], width: usize) -> String {
+        let v = input
+            .iter()
+            .take(width)
+            .map(|b| format!("{:02x}", b))
+            .collect::<Vec<String>>()
+            .join("");
+        format!("0x{}", v)
+    }
+}
+
+#[allow(clippy::type_complexity)]
+fn dlt_variable_name_and_unit<T: NomByteOrder>(
+    type_info: &TypeInfo,
+) -> fn(&[u8]) -> IResult<&[u8], (Option<String>, Option<String>), DltParseError> {
+    if type_info.has_variable_info {
+        |input: &[u8]| -> IResult<&[u8], (Option<String>, Option<String>), DltParseError> {
+            let (i2, name_size_unit_size) = tuple((T::parse_u16, T::parse_u16))(input)?;
+            dbg_parsed("namesize, unitsize", input, i2, &name_size_unit_size);
+            let (i3, name) = dlt_zero_terminated_string(i2, name_size_unit_size.0 as usize)?;
+            dbg_parsed("name", i2, i3, &name);
+            let (rest, unit) = dlt_zero_terminated_string(i3, name_size_unit_size.1 as usize)?;
+            dbg_parsed("unit", i3, rest, &unit);
+            Ok((rest, (Some(name.to_string()), Some(unit.to_string()))))
+        }
+    } else {
+        |input| Ok((input, (None, None)))
+    }
+}
+
+impl NomByteOrder for LittleEndian {
+    #[inline]
+    fn parse_u16(i: &[u8]) -> IResult<&[u8], u16, DltParseError> {
+        le_u16(i)
+    }
+    #[inline]
+    fn parse_i16(i: &[u8]) -> IResult<&[u8], i16, DltParseError> {
+        le_i16(i)
+    }
+    #[inline]
+    fn parse_u32(i: &[u8]) -> IResult<&[u8], u32, DltParseError> {
+        le_u32(i)
+    }
+    #[inline]
+    fn parse_i32(i: &[u8]) -> IResult<&[u8], i32, DltParseError> {
+        le_i32(i)
+    }
+    #[inline]
+    fn parse_f32(i: &[u8]) -> IResult<&[u8], f32, DltParseError> {
+        le_f32(i)
+    }
+    #[inline]
+    fn parse_u64(i: &[u8]) -> IResult<&[u8], u64, DltParseError> {
+        le_u64(i)
+    }
+    #[inline]
+    fn parse_i64(i: &[u8]) -> IResult<&[u8], i64, DltParseError> {
+        le_i64(i)
+    }
+    #[inline]
+    fn parse_f64(i: &[u8]) -> IResult<&[u8], f64, DltParseError> {
+        le_f64(i)
+    }
+    #[inline]
+    fn parse_u128(i: &[u8]) -> IResult<&[u8], u128, DltParseError> {
+        le_u128(i)
+    }
+    #[inline]
+    fn parse_i128(i: &[u8]) -> IResult<&[u8], i128, DltParseError> {
+        le_i128(i)
+    }
+    fn to_string(input: &[u8], width: usize) -> String {
+        let v = input
+            .iter()
+            .take(width)
+            .rev()
+            .map(|b| format!("{:02x}", b))
+            .collect::<Vec<String>>()
+            .join("");
+        format!("0x{}", v)
+    }
+}
+
+#[allow(clippy::type_complexity)]
+pub(crate) fn dlt_uint<T: NomByteOrder>(
+    width: TypeLength,
+) -> fn(&[u8]) -> IResult<&[u8], Value, DltParseError> {
+    match width {
+        TypeLength::BitLength8 => |i| map(be_u8, Value::U8)(i),
+        TypeLength::BitLength16 => |i| map(T::parse_u16, Value::U16)(i),
+        TypeLength::BitLength32 => |i| map(T::parse_u32, Value::U32)(i),
+        TypeLength::BitLength64 => |i| map(T::parse_u64, Value::U64)(i),
+        TypeLength::BitLength128 => |i| map(T::parse_u128, Value::U128)(i),
+    }
+}
+
+#[allow(clippy::type_complexity)]
+pub(crate) fn dlt_sint<T: NomByteOrder>(
+    width: TypeLength,
+) -> fn(&[u8]) -> IResult<&[u8], Value, DltParseError> {
+    match width {
+        TypeLength::BitLength8 => |i| map(be_i8, Value::I8)(i),
+        TypeLength::BitLength16 => |i| map(T::parse_i16, Value::I16)(i),
+        TypeLength::BitLength32 => |i| map(T::parse_i32, Value::I32)(i),
+        TypeLength::BitLength64 => |i| map(T::parse_i64, Value::I64)(i),
+        TypeLength::BitLength128 => |i| map(T::parse_i128, Value::I128)(i),
+    }
+}
+
+#[allow(clippy::type_complexity)]
+pub(crate) fn dlt_fint<T: NomByteOrder>(
+    width: FloatWidth,
+) -> fn(&[u8]) -> IResult<&[u8], Value, DltParseError> {
+    match width {
+        FloatWidth::Width32 => |i| map(T::parse_f32, Value::F32)(i),
+        FloatWidth::Width64 => |i| map(T::parse_f64, Value::F64)(i),
+    }
+}
+
+pub(crate) fn dlt_type_info<T: NomByteOrder>(
+    input: &[u8],
+) -> IResult<&[u8], TypeInfo, DltParseError> {
+    let (i, info) = T::parse_u32(input)?;
+    match TypeInfo::try_from(info) {
+        Ok(type_info) => {
+            trace!(
+                "type_info parsed input: {:02X?} => {:#b}",
+                &input[..4],
+                info
+            );
+            Ok((i, type_info))
+        }
+        Err(_) => {
+            let err_msg = format!("dlt_type_info failed to parse {}", T::to_string(input, 4));
+            Err(nom::Err::Error(DltParseError::ParsingHickup(err_msg)))
+        }
+    }
+}
+
+pub(crate) fn dlt_fixed_point<T: NomByteOrder>(
+    input: &[u8],
+    width: FloatWidth,
+) -> IResult<&[u8], FixedPoint, DltParseError> {
+    let (i, quantization) = T::parse_f32(input)?;
+    if width == FloatWidth::Width32 {
+        let (rest, offset) = T::parse_i32(i)?;
+        Ok((
+            rest,
+            FixedPoint {
+                quantization,
+                offset: FixedPointValue::I32(offset),
+            },
+        ))
+    } else if width == FloatWidth::Width64 {
+        let (rest, offset) = T::parse_i64(i)?;
+        Ok((
+            rest,
+            FixedPoint {
+                quantization,
+                offset: FixedPointValue::I64(offset),
+            },
+        ))
+    } else {
+        let err_msg = "error in dlt_fixed_point".to_string();
+        Err(nom::Err::Error(DltParseError::ParsingHickup(err_msg)))
+    }
+}
+
+pub(crate) fn dlt_argument<T: NomByteOrder>(
+    input: &[u8],
+) -> IResult<&[u8], Argument, DltParseError> {
+    let (i, type_info) = dlt_type_info::<T>(input)?;
+    dbg_parsed("type info", input, i, &type_info);
+    match type_info.kind {
+        TypeInfoKind::Signed(width) => {
+            let (before_val, name_unit) = dlt_variable_name_and_unit::<T>(&type_info)(i)?;
+            dbg_parsed("name and unit", i, before_val, &name_unit);
+            let (rest, value) = dlt_sint::<T>(width)(before_val)?;
+            dbg_parsed("sint", before_val, rest, &value);
+            Ok((
+                rest,
+                Argument {
+                    name: name_unit.0,
+                    unit: name_unit.1,
+                    value,
+                    fixed_point: None,
+                    type_info,
+                },
+            ))
+        }
+        TypeInfoKind::SignedFixedPoint(width) => {
+            let (before_val, name_unit) = dlt_variable_name_and_unit::<T>(&type_info)(i)?;
+            dbg_parsed("name and unit", i, before_val, &name_unit);
+            let (r, fp) = dlt_fixed_point::<T>(before_val, width)?;
+            let (after_fixed_point, fixed_point) = (r, Some(fp));
+            dbg_parsed("fixed_point", before_val, after_fixed_point, &fixed_point);
+            let (rest, value) =
+                dlt_sint::<T>(float_width_to_type_length(width))(after_fixed_point)?;
+            Ok((
+                rest,
+                Argument {
+                    name: name_unit.0,
+                    unit: name_unit.1,
+                    value,
+                    fixed_point,
+                    type_info,
+                },
+            ))
+        }
+        TypeInfoKind::Unsigned(width) => {
+            let (before_val, (name, unit)) = dlt_variable_name_and_unit::<T>(&type_info)(i)?;
+            let (rest, value) = dlt_uint::<T>(width)(before_val)?;
+            dbg_parsed("unsigned", before_val, rest, &value);
+            Ok((
+                rest,
+                Argument {
+                    name,
+                    unit,
+                    value,
+                    fixed_point: None,
+                    type_info,
+                },
+            ))
+        }
+        TypeInfoKind::UnsignedFixedPoint(width) => {
+            let (before_val, (name, unit)) = dlt_variable_name_and_unit::<T>(&type_info)(i)?;
+            let (after_fixed_point, fixed_point) = {
+                let (r, fp) = dlt_fixed_point::<T>(before_val, width)?;
+                (r, Some(fp))
+            };
+            let (rest, value) =
+                dlt_uint::<T>(float_width_to_type_length(width))(after_fixed_point)?;
+            Ok((
+                rest,
+                Argument {
+                    type_info,
+                    name,
+                    unit,
+                    fixed_point,
+                    value,
+                },
+            ))
+        }
+        TypeInfoKind::Float(width) => {
+            let (rest, ((name, unit), value)) = tuple((
+                dlt_variable_name_and_unit::<T>(&type_info),
+                dlt_fint::<T>(width),
+            ))(i)?;
+            Ok((
+                rest,
+                Argument {
+                    name,
+                    unit,
+                    value,
+                    fixed_point: None,
+                    type_info,
+                },
+            ))
+        }
+        TypeInfoKind::Raw => {
+            let (i2, raw_byte_cnt) = T::parse_u16(i)?;
+            let (i3, name) = if type_info.has_variable_info {
+                map(dlt_variable_name::<T>, Some)(i2)?
+            } else {
+                (i2, None)
+            };
+            let (rest, value) = map(take(raw_byte_cnt), |s: &[u8]| Value::Raw(s.to_vec()))(i3)?;
+            Ok((
+                rest,
+                Argument {
+                    name,
+                    unit: None,
+                    value,
+                    fixed_point: None,
+                    type_info,
+                },
+            ))
+        }
+        TypeInfoKind::Bool => {
+            let (after_var_name, name) = if type_info.has_variable_info {
+                map(dlt_variable_name::<T>, Some)(i)?
+            } else {
+                (i, None)
+            };
+            dbg_parsed("var name", i, after_var_name, &name);
+            let (rest, bool_value) = be_u8(after_var_name)?;
+            dbg_parsed("bool value", after_var_name, rest, &bool_value);
+            Ok((
+                rest,
+                Argument {
+                    type_info,
+                    name,
+                    unit: None,
+                    fixed_point: None,
+                    value: Value::Bool(bool_value),
+                },
+            ))
+        }
+        TypeInfoKind::StringType => {
+            let (i2, size) = T::parse_u16(i)?;
+            let (i3, name) = if type_info.has_variable_info {
+                map(dlt_variable_name::<T>, Some)(i2)?
+            } else {
+                (i2, None)
+            };
+            let (rest, value) = dlt_zero_terminated_string(i3, size as usize)?;
+            dbg_parsed("StringType", i3, rest, &value);
+            // trace!(
+            //     "was stringtype: \"{}\", size should have been {}",
+            //     value, size
+            // );
+            Ok((
+                rest,
+                Argument {
+                    name,
+                    unit: None,
+                    fixed_point: None,
+                    value: Value::StringVal(value.to_string()),
+                    type_info,
+                },
+            ))
+        }
+    }
+}
+
+#[allow(dead_code)]
+struct DltArgumentParser {
+    current_index: Option<usize>,
+}
+
+fn dlt_payload<T: NomByteOrder>(
+    input: &[u8],
+    verbose: bool,
+    payload_length: u16,
+    arg_cnt: u8,
+    is_controll_msg: bool,
+) -> IResult<&[u8], PayloadContent, DltParseError> {
+    if verbose {
+        match count(dlt_argument::<T>, arg_cnt as usize)(input) {
+            Ok((rest, arguments)) => Ok((rest, PayloadContent::Verbose(arguments))),
+            Err(e) => Err(add_context(
+                e,
+                format!("Problem parsing {} arguments", arg_cnt),
+            )),
+        }
+    } else if is_controll_msg {
+        if payload_length < 1 {
+            return Err(nom::Err::Failure(DltParseError::ParsingHickup(format!(
+                "error, payload too short {}",
+                payload_length
+            ))));
+        }
+        match tuple((nom::number::complete::be_u8, take(payload_length - 1)))(input) {
+            Ok((rest, (control_msg_id, payload))) => Ok((
+                rest,
+                PayloadContent::ControlMsg(
+                    ControlType::from_value(control_msg_id),
+                    payload.to_vec(),
+                ),
+            )),
+            Err(e) => Err(e),
+        }
+    } else {
+        if input.len() < 4 {
+            return Err(nom::Err::Failure(DltParseError::ParsingHickup(format!(
+                "error, payload too short {}",
+                input.len()
+            ))));
+        }
+        match tuple((T::parse_u32, take(payload_length - 4)))(input) {
+            Ok((rest, (message_id, payload))) => Ok((
+                rest,
+                PayloadContent::NonVerbose(message_id, payload.to_vec()),
+            )),
+            Err(e) => Err(e),
+        }
+    }
+}
+
+#[inline]
+fn dbg_parsed<T: std::fmt::Debug>(_name: &str, _before: &[u8], _after: &[u8], _value: &T) {
+    // #[cfg(feature = "debug_parser")]
+    {
+        let input_len = _before.len();
+        let now_len = _after.len();
+        let parsed_len = input_len - now_len;
+        if parsed_len == 0 {
+            trace!("{}: not parsed", _name);
+        } else {
+            trace!(
+                "parsed {} ({} bytes: {:02X?}) => {:?}",
+                _name,
+                parsed_len,
+                &_before[0..parsed_len],
+                _value
+            );
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ParsedMessage {
+    /// Regular message, could be parsed
+    Item(Message),
+    /// message was filtered out due to filter conditions (Log-Level etc.)
+    FilteredOut(usize),
+    /// Parsed message was invalid, no parse possible
+    Invalid,
+}
+
+/// Parse a DLT-message from some binary input data.
+///
+/// A DLT message looks like this: `<STANDARD-HEADER><EXTENDED-HEADER><PAYLOAD>`
+///
+/// if stored, an additional header is placed BEFORE all of this `<storage-header><...>`
+///
+/// example: `444C5401 262CC94D D8A20C00 45435500 3500001F 45435500 3F88623A 16014150 5000434F 4E001100 00000472 656D6F`
+/// --------------------------------------------
+/// `<STORAGE-HEADER>: 444C5401 262CC94D D8A20C00 45435500`
+///     444C5401 = DLT + 0x01 (DLT Pattern)
+///  timestamp_sec: 262CC94D = 0x4DC92C26
+///  timestamp_us: D8A20C00 = 0x000CA2D8
+///  ecu-id: 45435500 = b"ECU\0"
+///
+/// 3500001F 45435500 3F88623A 16014150 5000434F 4E001100 00000472 656D6F (31 byte)
+/// --------------------------------------------
+/// <HEADER>: 35 00 001F 45435500 3F88623A
+///   header type = 0x35 = 0b0011 0101
+///       UEH: 1 - > using extended header
+///       MSBF: 0 - > little endian
+///       WEID: 1 - > with ecu id
+///       WSID: 0 - > no session id
+///       WTMS: 1 - > with timestamp
+///   message counter = 0x00 = 0
+///   length = 001F = 31
+///   ecu-id = 45435500 = "ECU "
+///   timestamp = 3F88623A = 106590265.0 ms since ECU startup (~30 h)
+/// --------------------------------------------
+/// <EXTENDED HEADER>: 16014150 5000434F 4E00
+///   message-info MSIN = 0x16 = 0b0001 0110
+///   0 -> non-verbose
+///   011 (MSTP Message Type) = 0x3 = Dlt Control Message
+///   0001 (MTIN Message Type Info) = 0x1 = Request Control Message
+///   number of arguments NOAR = 0x01
+///   application id = 41505000 = "APP "
+///   context id = 434F4E00 = "CON "
+/// --------------------------------------------
+/// payload: 1100 00000472 656D6F
+///   0x11 == SetDefaultLogLevel
+///     00 == new log level (block all messages)
+///
+pub fn dlt_message<'a>(
+    input: &'a [u8],
+    filter_config_opt: Option<&filtering::ProcessedDltFilterConfig>,
+    with_storage_header: bool,
+) -> Result<(&'a [u8], ParsedMessage), DltParseError> {
+    dlt_message_intern(input, filter_config_opt, with_storage_header).map_err(DltParseError::from)
+}
+
+pub fn dlt_message_intern<'a>(
+    input: &'a [u8],
+    filter_config_opt: Option<&filtering::ProcessedDltFilterConfig>,
+    with_storage_header: bool,
+) -> IResult<&'a [u8], ParsedMessage, DltParseError> {
+    // trace!("starting to parse dlt_message==================");
+    let (after_storage_header, storage_header_shifted): (&[u8], Option<(StorageHeader, u64)>) =
+        if with_storage_header {
+            dlt_storage_header(input)?
+        } else {
+            (input, None)
+        };
+    if let Some((storage_header, shifted)) = &storage_header_shifted {
+        dbg_parsed(
+            "storage header",
+            &input[(*shifted as usize)..],
+            &after_storage_header,
+            &storage_header,
+        )
+    };
+    let (after_storage_and_normal_header, header) = dlt_standard_header(after_storage_header)?;
+    dbg_parsed(
+        "normal header",
+        &after_storage_header,
+        &after_storage_and_normal_header,
+        &header,
+    );
+
+    let payload_length_res = validated_payload_length(&header, input.len());
+
+    let mut verbose: bool = false;
+    let mut is_controll_msg = false;
+    let mut arg_count = 0;
+    let (after_headers, extended_header) = if header.has_extended_header {
+        let (rest, ext_header) = dlt_extended_header(after_storage_and_normal_header)?;
+        verbose = ext_header.verbose;
+        arg_count = ext_header.argument_count;
+        is_controll_msg = matches!(ext_header.message_type, MessageType::Control(_));
+        dbg_parsed(
+            "extended header",
+            &after_storage_and_normal_header,
+            &rest,
+            &ext_header,
+        );
+        (rest, Some(ext_header))
+    } else {
+        (after_storage_and_normal_header, None)
+    };
+    // trace!(
+    //     "extended header: {:?}",
+    //     serde_json::to_string(&extended_header)
+    // );
+    let payload_length = match payload_length_res {
+        Ok(length) => length,
+        Err(e) => {
+            warn!("No validated payload length: {}", e);
+            return Ok((after_storage_and_normal_header, ParsedMessage::Invalid));
+        }
+    };
+    if filtered_out(
+        extended_header.as_ref(),
+        filter_config_opt,
+        header.ecu_id.as_ref(),
+    ) {
+        let (after_message, _) = take(payload_length)(after_headers)?;
+        return Ok((
+            after_message,
+            ParsedMessage::FilteredOut(payload_length as usize),
+        ));
+    }
+    let (i, payload) = if header.endianness == Endianness::Big {
+        dlt_payload::<BigEndian>(
+            after_headers,
+            verbose,
+            payload_length,
+            arg_count,
+            is_controll_msg,
+        )?
+    } else {
+        dlt_payload::<LittleEndian>(
+            after_headers,
+            verbose,
+            payload_length,
+            arg_count,
+            is_controll_msg,
+        )?
+    };
+    dbg_parsed("payload", &after_headers, &i, &payload);
+    Ok((
+        i,
+        ParsedMessage::Item(Message {
+            storage_header: storage_header_shifted.map(|shs| shs.0),
+            header,
+            extended_header,
+            payload,
+        }),
+    ))
+}
+
+fn filtered_out(
+    extended_header: Option<&ExtendedHeader>,
+    filter_config_opt: Option<&filtering::ProcessedDltFilterConfig>,
+    ecu_id: Option<&String>,
+) -> bool {
+    if let Some(filter_config) = filter_config_opt {
+        if let Some(h) = &extended_header {
+            if let Some(min_filter_level) = filter_config.min_log_level {
+                if h.skip_with_level(min_filter_level) {
+                    // trace!("no need to parse further, skip payload (skipped level)");
+                    return true;
+                }
+            }
+            if let Some(only_these_components) = &filter_config.app_ids {
+                if !only_these_components.contains(&h.application_id) {
+                    // trace!("no need to parse further, skip payload (skipped app id)");
+                    return true;
+                }
+            }
+            if let Some(only_these_context_ids) = &filter_config.context_ids {
+                if !only_these_context_ids.contains(&h.context_id) {
+                    // trace!("no need to parse further, skip payload (skipped context id)");
+                    return true;
+                }
+            }
+            if let Some(only_these_ecu_ids) = &filter_config.ecu_ids {
+                if let Some(ecu_id) = ecu_id {
+                    if !only_these_ecu_ids.contains(ecu_id) {
+                        // trace!("no need to parse further, skip payload (skipped ecu id)");
+                        return true;
+                    }
+                }
+            }
+        } else {
+            // filter out some messages when we do not have an extended header
+            if let Some(app_id_set) = &filter_config.app_ids {
+                if filter_config.app_id_count > app_id_set.len() as i64 {
+                    // some app id was filtered, ignore this entry
+                    return true;
+                }
+            }
+            if let Some(context_id_set) = &filter_config.context_ids {
+                if filter_config.context_id_count > context_id_set.len() as i64 {
+                    // some context id was filtered, ignore this entry
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+pub(crate) fn validated_payload_length(
+    header: &StandardHeader,
+    remaining_bytes: usize,
+) -> Result<u16, DltParseError> {
+    let message_length = header.overall_length();
+    let headers_length = calculate_all_headers_length(header.header_type_byte());
+    if message_length < headers_length {
+        return Err(DltParseError::ParsingHickup(
+            "Parsed message-length is less then the length of all headers".to_string(),
+        ));
+    }
+
+    let payload_length = message_length - headers_length;
+    if payload_length as usize > remaining_bytes {
+        return Err(DltParseError::ParsingHickup (
+            "Payload length seems to be longer then the remaining bytes, message-length is malformed".to_string(),
+        ));
+    }
+    Ok(message_length - headers_length)
+}
+
+pub(crate) fn skip_till_after_next_storage_header(
+    input: &[u8],
+) -> Result<(&[u8], u64), DltParseError> {
+    match forward_to_next_storage_header(input) {
+        Some((consumed, rest)) => {
+            let (after_storage_header, skipped_bytes) = skip_storage_header(rest)?;
+            Ok((after_storage_header, consumed + skipped_bytes))
+        }
+        None => Err(DltParseError::ParsingHickup(
+            "did not find another storage header".into(),
+        )),
+    }
+}
+
+/// check if the DLT_PATTERN next and just skip the storage header if so
+/// returns a slice where the storage header was removed
+pub fn skip_storage_header(input: &[u8]) -> IResult<&[u8], u64, DltParseError> {
+    let (i, (_, _, _)): (&[u8], _) = tuple((tag("DLT"), tag(&[0x01]), take(12usize)))(input)?;
+    if input.len() - i.len() == STORAGE_HEADER_LENGTH as usize {
+        Ok((i, STORAGE_HEADER_LENGTH))
+    } else {
+        Err(Error(DltParseError::ParsingHickup(
+            "did not match DLT pattern".into(),
+        )))
+    }
+}
+
+pub fn dlt_consume_msg(input: &[u8]) -> IResult<&[u8], Option<u64>, DltParseError> {
+    let (after_storage_header, skipped_bytes) = skip_storage_header(input)?;
+    let (_, header) = dlt_standard_header(after_storage_header)?;
+    let overall_length_without_storage_header = header.overall_length() as u64;
+    let (after_message, _) = take(overall_length_without_storage_header)(after_storage_header)?;
+    let consumed = skipped_bytes + overall_length_without_storage_header;
+    Ok((after_message, Some(consumed)))
+}
