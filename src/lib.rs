@@ -20,10 +20,10 @@
 extern crate log;
 
 pub mod dlt;
-pub mod dlt_fmt;
-pub mod dlt_parse;
 pub mod fibex;
 pub mod filtering;
+pub mod fmt;
+pub mod parse;
 pub mod service_id;
 pub mod statistics;
 

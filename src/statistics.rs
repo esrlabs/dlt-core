@@ -1,6 +1,6 @@
 use crate::{
     dlt::{LogLevel, MessageType},
-    dlt_parse::{
+    parse::{
         dlt_extended_header, dlt_standard_header, skip_till_after_next_storage_header,
         validated_payload_length, DltParseError,
     },

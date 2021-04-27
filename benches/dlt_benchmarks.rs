@@ -4,7 +4,7 @@ extern crate criterion;
 // use dlt::dlt::*;
 use bytes::BytesMut;
 use criterion::Criterion;
-use dlt_core::{dlt::DltTimeStamp, dlt_parse::dlt_zero_terminated_string};
+use dlt_core::{dlt::DltTimeStamp, parse::dlt_zero_terminated_string};
 
 fn dlt_benchmark(c: &mut Criterion) {
     c.bench_function("format header", |b| {

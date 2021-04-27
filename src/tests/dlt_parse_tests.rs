@@ -2,7 +2,7 @@
 mod tests {
     use crate::{
         dlt::*,
-        dlt_parse::{
+        parse::{
             dlt_argument, dlt_consume_msg, dlt_extended_header, dlt_message, dlt_standard_header,
             dlt_storage_header, dlt_type_info, dlt_zero_terminated_string,
             forward_to_next_storage_header, parse_ecu_id, DltParseError, ParsedMessage,
