@@ -1,4 +1,4 @@
-// Copyright (c) 2019 E.S.R.Labs. All rights reserved.
+// Copyright (c) 2021 ESR Labs GmbH. All rights reserved.
 //
 // NOTICE:  All information contained herein is, and remains
 // the property of E.S.R.Labs and its suppliers, if any.
@@ -9,26 +9,46 @@
 // Dissemination of this information or reproduction of this material
 // is strictly forbidden unless prior written permission is obtained
 // from E.S.R.Labs.
+
+//! # filter definitions for filtering dlt messages
 use crate::dlt;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, fs, io::Read, iter::FromIterator};
 
-/// only select log entries with level MIN_LEVEL and more severe
-///  1 => FATAL
-///  2 => ERROR
-///  3 => WARN
-///  4 => INFO
-///  5 => DEBUG
-///  6 => VERBOSE
+/// Describes what DLT message to filter out based on log-level and app/ecu/context-id
+///
+/// In the current form each filter element is independent from another, i.e. it is
+/// not possible to define filters like:
+/// - `app-id == "abc" && log-level <= WARN OR app-id == "foo" && log-level <= DEBUG`
+///
+/// only this is possible:
+/// - `app-id is_one_of ["abc","foo"] AND log-level <= DEBUG`
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DltFilterConfig {
+    /// only select log entries with level MIN_LEVEL and more severe
+    ///
+    /// ``` text
+    ///  1 => FATAL
+    ///  2 => ERROR
+    ///  3 => WARN
+    ///  4 => INFO
+    ///  5 => DEBUG
+    ///  6 => VERBOSE
+    /// ```
     pub min_log_level: Option<u8>,
+    /// what app ids should be allowed.
     pub app_ids: Option<Vec<String>>,
+    /// what ecu ids should be allowed
     pub ecu_ids: Option<Vec<String>>,
+    /// what context ids should be allowed
     pub context_ids: Option<Vec<String>>,
+    /// how many app ids exist in total
     pub app_id_count: i64,
+    /// how many context ids exist in total
     pub context_id_count: i64,
 }
+
+/// More
 #[derive(Clone, Debug)]
 pub struct ProcessedDltFilterConfig {
     pub min_log_level: Option<dlt::LogLevel>,
@@ -56,6 +76,7 @@ pub fn process_filter_config(cfg: DltFilterConfig) -> ProcessedDltFilterConfig {
     }
 }
 
+/// Read filter config from a json file
 pub fn read_filter_options(f: &mut fs::File) -> Option<DltFilterConfig> {
     let mut contents = String::new();
     f.read_to_string(&mut contents)

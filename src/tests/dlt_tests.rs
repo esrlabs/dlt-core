@@ -1,3 +1,14 @@
+// Copyright (c) 2021 ESR Labs GmbH. All rights reserved.
+//
+// NOTICE:  All information contained herein is, and remains
+// the property of E.S.R.Labs and its suppliers, if any.
+// The intellectual and technical concepts contained herein are
+// proprietary to E.S.R.Labs and its suppliers and may be covered
+// by German and Foreign Patents, patents in process, and are protected
+// by trade secret or copyright law.
+// Dissemination of this information or reproduction of this material
+// is strictly forbidden unless prior written permission is obtained
+// from E.S.R.Labs.
 #[cfg(test)]
 mod tests {
     use crate::{dlt::*, proptest_strategies::argument_strategy};
@@ -16,7 +27,7 @@ mod tests {
         fn length_of_dlt_arg_is_number_of_bytes(arg in argument_strategy()) {
             let expected = arg.as_bytes::<BigEndian>().len();
             let expected_using_little_endian = arg.as_bytes::<LittleEndian>().len();
-            let calculated = arg.len_new();
+            let calculated = arg.len();
             assert_eq!(
                 expected,
                 calculated
@@ -64,6 +75,7 @@ mod tests {
             header.as_bytes()
         );
     }
+
     #[test]
     fn test_filter_nothing_with_invalid_level() {
         let extended_header = ExtendedHeader {
@@ -78,6 +90,7 @@ mod tests {
         assert!(!extended_header.skip_with_level(LogLevel::Invalid(1)));
         assert!(extended_header.skip_with_level(LogLevel::Invalid(2)));
     }
+
     #[test]
     fn test_filter_out_non_relevant_ext_headers() {
         let extended_header = ExtendedHeader {
@@ -103,6 +116,7 @@ mod tests {
         // other message types should not be fitered
         assert!(!extended_header.skip_with_level(LogLevel::Fatal));
     }
+
     #[test]
     fn test_convert_extended_header_to_bytes() {
         let extended_header = ExtendedHeader {
@@ -128,6 +142,7 @@ mod tests {
             extended_header.as_bytes()
         );
     }
+
     #[test]
     fn test_convert_storage_header_to_bytes() {
         let timestamp = DltTimeStamp {
@@ -148,6 +163,7 @@ mod tests {
             storage_header.as_bytes()
         );
     }
+
     #[test]
     fn test_convert_typeinfo_to_bytes() {
         let type_info = TypeInfo {
@@ -215,6 +231,7 @@ mod tests {
             LittleEndian::read_u32(&type_info3.as_bytes::<LittleEndian>()[..])
         );
     }
+
     #[test]
     fn test_convert_bool_argument_to_bytes() {
         let type_info = TypeInfo {
@@ -254,6 +271,7 @@ mod tests {
         expected2.extend(vec![0x1]); // value for bool (true == 1)
         assert_eq!(expected2, argument2.as_bytes::<BigEndian>());
     }
+
     #[test]
     fn test_convert_uint_argument_to_bytes() {
         let type_info = TypeInfo {
@@ -391,6 +409,7 @@ mod tests {
         expected.extend(&buf); // value
         assert_eq!(expected, argument.as_bytes::<BigEndian>());
     }
+
     #[test]
     fn test_convert_string_argument_to_bytes() {
         let type_info = TypeInfo {
@@ -434,6 +453,7 @@ mod tests {
         println!("{:02X?}", argument_bytes);
         assert_eq!(expected, argument_bytes);
     }
+
     #[test]
     fn test_convert_fixedpoint_argument_to_bytes() {
         let type_info = TypeInfo {
@@ -493,6 +513,7 @@ mod tests {
         expected.extend(&buf); // value
         assert_eq!(expected, argument.as_bytes::<BigEndian>());
     }
+
     #[test]
     fn test_convert_raw_argument_to_bytes() {
         let type_info = TypeInfo {

@@ -1,3 +1,16 @@
+// Copyright (c) 2021 ESR Labs GmbH. All rights reserved.
+//
+// NOTICE:  All information contained herein is, and remains
+// the property of E.S.R.Labs and its suppliers, if any.
+// The intellectual and technical concepts contained herein are
+// proprietary to E.S.R.Labs and its suppliers and may be covered
+// by German and Foreign Patents, patents in process, and are protected
+// by trade secret or copyright law.
+// Dissemination of this information or reproduction of this material
+// is strictly forbidden unless prior written permission is obtained
+// from E.S.R.Labs.
+
+//! # rapidly gather statistics info of a dlt source
 use crate::{
     dlt::{LogLevel, MessageType},
     parse::{
@@ -5,12 +18,11 @@ use crate::{
         validated_payload_length, DltParseError,
     },
 };
-use buf_redux::{policy::MinBuffered, BufReader as ReduxReader};
 use nom::bytes::streaming::take;
 use rustc_hash::FxHashMap;
 use serde::Serialize;
-use std::io::{BufRead, Read};
 
+/// Parse out the `StatisticRowInfo` for the next DLT message in a byte array
 pub fn dlt_statistic_row_info(
     input: &[u8],
     with_storage_header: bool,
@@ -69,6 +81,7 @@ pub fn dlt_statistic_row_info(
     ))
 }
 
+/// Shows how many messages per log level where found
 #[derive(Serialize, Debug, Default)]
 pub struct LevelDistribution {
     pub non_log: usize,
@@ -123,6 +136,8 @@ impl LevelDistribution {
 
 pub type IdMap = FxHashMap<String, LevelDistribution>;
 
+/// Includes the `LevelDistribution` for all `app-ids`, `context-ids` and
+/// `ecu_ids`
 #[derive(Serialize, Debug)]
 pub struct StatisticInfo {
     pub app_ids: Vec<(String, LevelDistribution)>,
@@ -131,31 +146,11 @@ pub struct StatisticInfo {
     pub contained_non_verbose: bool,
 }
 
+/// Stats about a row in a DLT file
 #[derive(Serialize, Debug)]
 pub struct StatisticRowInfo {
     pub app_id_context_id: Option<(String, String)>,
     pub ecu_id: Option<String>,
     pub level: Option<LogLevel>,
     pub verbose: bool,
-}
-
-pub fn read_one_dlt_message_info<T: Read>(
-    reader: &mut ReduxReader<T, MinBuffered>,
-    with_storage_header: bool,
-) -> Result<Option<(u64, StatisticRowInfo)>, DltParseError> {
-    match reader.fill_buf() {
-        Ok(content) => {
-            if content.is_empty() {
-                return Ok(None);
-            }
-            let available = content.len();
-            let r = dlt_statistic_row_info(content, with_storage_header)?;
-            let consumed = available - r.0.len();
-            Ok(Some((consumed as u64, r.1)))
-        }
-        Err(e) => Err(DltParseError::ParsingHickup(format!(
-            "error while parsing dlt messages: {}",
-            e
-        ))),
-    }
 }

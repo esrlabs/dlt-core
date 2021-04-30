@@ -1,5 +1,19 @@
+// Copyright (c) 2021 ESR Labs GmbH. All rights reserved.
+//
+// NOTICE:  All information contained herein is, and remains
+// the property of E.S.R.Labs and its suppliers, if any.
+// The intellectual and technical concepts contained herein are
+// proprietary to E.S.R.Labs and its suppliers and may be covered
+// by German and Foreign Patents, patents in process, and are protected
+// by trade secret or copyright law.
+// Dissemination of this information or reproduction of this material
+// is strictly forbidden unless prior written permission is obtained
+// from E.S.R.Labs.
+
+//! # official supported DLT service ids
 use std::collections::HashMap;
 lazy_static::lazy_static! {
+    /// Contains all the official service ids with it's u8 representation
     #[rustfmt::skip]
     pub static ref SERVICE_ID_MAPPING: HashMap<u8, (&'static str, &'static str)> = {
         let mut m = HashMap::new();

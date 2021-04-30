@@ -1,3 +1,19 @@
+// Copyright (c) 2021 ESR Labs GmbH. All rights reserved.
+//
+// NOTICE:  All information contained herein is, and remains
+// the property of E.S.R.Labs and its suppliers, if any.
+// The intellectual and technical concepts contained herein are
+// proprietary to E.S.R.Labs and its suppliers and may be covered
+// by German and Foreign Patents, patents in process, and are protected
+// by trade secret or copyright law.
+// Dissemination of this information or reproduction of this material
+// is strictly forbidden unless prior written permission is obtained
+// from E.S.R.Labs.
+
+//! # Support for FIBEX files
+//!
+//! `fibex` contains support for non-verbose message information
+//! that is stored in FIBEX files (Field Bus Exchange Format)
 use crate::dlt::{FloatWidth, StringCoding, TypeInfo, TypeInfoKind, TypeLength};
 use derive_more::{Deref, Display};
 use quick_xml::{
@@ -14,30 +30,37 @@ use std::{
 };
 use thiserror::Error;
 
+/// FIBEX related error types
 #[derive(Error, Debug)]
 pub enum Error {
+    /// Some structural problem with the fibex file
     #[error("Fibex structure wrong: {0}")]
     FibexStructure(String),
+    /// Problems parsing the fibex file
     #[error("Problems parsing: {0}")]
     Parse(String),
+    /// Reading the xml failed
     #[error("XML error: {0:?}")]
     Xml(#[from] quick_xml::Error),
     #[error("IO error: {0:?}")]
     Io(#[from] std::io::Error),
 }
 
+/// Contains all the paths of fibex files that should be combined into the model
 #[derive(Serialize, Deserialize, Debug)]
 pub struct FibexConfig {
     pub fibex_file_paths: Vec<String>,
 }
 
+/// The model represented by the FIBEX data
 #[derive(Debug, PartialEq, Clone)]
 pub struct FibexMetadata {
     pub(crate) frame_map_with_key: HashMap<(ContextId, ApplicationId, FrameId), FrameMetadata>, // TODO: avoid cloning on .get
     pub(crate) frame_map: HashMap<FrameId, FrameMetadata>,
 }
+
 #[derive(Debug, PartialEq, Clone)]
-pub struct FrameMetadata {
+pub(crate) struct FrameMetadata {
     pub short_name: String,
     pub pdus: Vec<PduMetadata>, // TODO keep vector of ids and lookup PduMetadata by id if too expensive
     pub application_id: Option<ApplicationId>,
@@ -45,20 +68,21 @@ pub struct FrameMetadata {
     pub message_type: Option<String>,
     pub message_info: Option<String>,
 }
+
 #[derive(Debug, PartialEq, Clone)]
-pub struct PduMetadata {
-    pub description: Option<String>,
-    pub signal_types: Vec<TypeInfo>,
+pub(crate) struct PduMetadata {
+    pub(crate) description: Option<String>,
+    pub(crate) signal_types: Vec<TypeInfo>,
 }
 
 #[derive(Hash, PartialEq, Eq, Clone, Debug, Deref, Display)]
-pub struct FrameId(pub String);
+pub(crate) struct FrameId(pub String);
 
 #[derive(Hash, PartialEq, Eq, Clone, Debug, Deref, Display)]
-pub struct ContextId(pub String);
+pub(crate) struct ContextId(pub String);
 
 #[derive(Hash, PartialEq, Eq, Clone, Debug, Deref, Display)]
-pub struct ApplicationId(pub String);
+pub(crate) struct ApplicationId(pub String);
 
 fn type_info_for_signal_ref(
     signal_ref: String,
@@ -232,6 +256,7 @@ fn type_info_for_signal_ref(
     }
 }
 
+/// Collects all the data found in the FIBEX files and combines it into a complet model
 pub fn gather_fibex_data(fibex: FibexConfig) -> Option<FibexMetadata> {
     if fibex.fibex_file_paths.is_empty() {
         None
@@ -251,7 +276,7 @@ pub fn gather_fibex_data(fibex: FibexConfig) -> Option<FibexMetadata> {
     }
 }
 
-pub fn read_fibexes(files: Vec<PathBuf>) -> Result<FibexMetadata, Error> {
+pub(crate) fn read_fibexes(files: Vec<PathBuf>) -> Result<FibexMetadata, Error> {
     let mut frames = vec![];
     let mut frame_map_with_key = HashMap::new();
     let mut frame_map = HashMap::new();
@@ -457,7 +482,7 @@ const B_BASE_DATA_TYPE: &[u8] = b"BASE-DATA-TYPE";
 const B_CODED_TYPE: &[u8] = b"CODED-TYPE";
 
 #[derive(Debug)]
-pub enum Event {
+pub(crate) enum Event {
     PduStart {
         id: String,
     },
@@ -499,7 +524,7 @@ pub enum Event {
     },
     Eof,
 }
-pub struct XmlReaderWithContext<B: BufRead> {
+pub(crate) struct XmlReaderWithContext<B: BufRead> {
     xml_reader: XmlReader<B>,
     file_path: PathBuf,
 }
@@ -540,6 +565,7 @@ impl<B: BufRead> XmlReaderWithContext<B> {
         self.attr_opt(e.attributes(), B_ID_REF)?
             .ok_or_else(|| missing_attr_err(B_ID_REF, tag, self.line_and_column()))
     }
+    #[allow(dead_code)]
     pub fn read_bool(&mut self, e: &BytesStart<'_>) -> Result<bool, Error> {
         match self.read_text_buf(e)?.as_ref() {
             "true" => Ok(true),
@@ -575,6 +601,8 @@ impl<B: BufRead> XmlReaderWithContext<B> {
         }
         Ok(None)
     }
+
+    #[allow(dead_code)]
     pub fn xsi_type_attr(&self, e: &BytesStart<'_>, tag: &[u8]) -> Result<String, Error> {
         self.attr(e, B_XSI_TYPE, tag)
     }
@@ -586,7 +614,8 @@ impl<B: BufRead> XmlReaderWithContext<B> {
         self.attr(e, B_ID, tag)
     }
 }
-pub struct Reader<B: BufRead> {
+
+pub(crate) struct Reader<B: BufRead> {
     xml_reader: XmlReaderWithContext<B>,
     buf: Vec<u8>,
     buf2: Vec<u8>,
@@ -604,6 +633,7 @@ pub struct Reader<B: BufRead> {
     message_info: Option<String>,
     base_data_type: Option<String>,
 }
+
 impl Reader<BufReader<File>> {
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
         Ok(Reader {
@@ -628,6 +658,7 @@ impl Reader<BufReader<File>> {
         })
     }
 }
+
 impl<B: BufRead> Reader<B> {
     #[allow(clippy::cognitive_complexity)]
     pub fn read_event(&mut self) -> Result<Event, Error> {
@@ -879,6 +910,7 @@ impl<B: BufRead> Reader<B> {
         }
     }
 }
+
 fn missing_tag_err(
     tag: &[u8],
     enclosing_tag: &[u8],
@@ -891,6 +923,7 @@ fn missing_tag_err(
         line_column.unwrap_or((0, 0))
     ))
 }
+
 fn missing_attr_err(attr: &[u8], tag: &[u8], line_column: Result<(usize, usize), Error>) -> Error {
     Error::FibexStructure(format!(
         "required {} attribute is missing for {} at {:?}",

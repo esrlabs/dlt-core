@@ -1,4 +1,4 @@
-// Copyright (c) 2019 E.S.R.Labs. All rights reserved.
+// Copyright (c) 2021 ESR Labs GmbH. All rights reserved.
 //
 // NOTICE:  All information contained herein is, and remains
 // the property of E.S.R.Labs and its suppliers, if any.
@@ -9,15 +9,16 @@
 // Dissemination of this information or reproduction of this material
 // is strictly forbidden unless prior written permission is obtained
 // from E.S.R.Labs.
-// use crate::{dlt::*, filtering};
+
+//! # dlt parsing support
 use crate::{
     dlt::{
         calculate_all_headers_length, float_width_to_type_length, ApplicationTraceType, Argument,
         ControlType, DltTimeStamp, Endianness, ExtendedHeader, FixedPoint, FixedPointValue,
         FloatWidth, LogLevel, Message, MessageType, NetworkTraceType, PayloadContent,
-        StandardHeader, StorageHeader, TryFrom, TypeInfo, TypeInfoKind, TypeLength, Value,
-        BIG_ENDIAN_FLAG, STORAGE_HEADER_LENGTH, VERBOSE_FLAG, WITH_ECU_ID_FLAG,
-        WITH_EXTENDED_HEADER_FLAG, WITH_SESSION_ID_FLAG, WITH_TIMESTAMP_FLAG,
+        StandardHeader, StorageHeader, TypeInfo, TypeInfoKind, TypeLength, Value, BIG_ENDIAN_FLAG,
+        STORAGE_HEADER_LENGTH, VERBOSE_FLAG, WITH_ECU_ID_FLAG, WITH_EXTENDED_HEADER_FLAG,
+        WITH_SESSION_ID_FLAG, WITH_TIMESTAMP_FLAG,
     },
     filtering,
 };
@@ -35,13 +36,12 @@ use nom::{
     Err::Error,
     IResult,
 };
+use std::convert::TryFrom;
 use thiserror::Error;
 
-pub const STOP_CHECK_LINE_THRESHOLD: usize = 250_000;
-pub const DLT_READER_CAPACITY: usize = 10 * 1024 * 1024;
-pub const DLT_MIN_BUFFER_SPACE: usize = 10 * 1024;
-pub const DLT_PATTERN_SIZE: usize = 4;
-pub(crate) const DLT_PATTERN: &[u8] = &[0x44, 0x4C, 0x54, 0x01];
+const DLT_PATTERN_SIZE: usize = 4;
+/// DLT pattern at the start of a storage header
+pub const DLT_PATTERN: &[u8] = &[0x44, 0x4C, 0x54, 0x01];
 
 pub(crate) fn parse_ecu_id(input: &[u8]) -> IResult<&[u8], &str, DltParseError> {
     dlt_zero_terminated_string(input, 4)
@@ -61,6 +61,7 @@ impl ParseError<&[u8]> for DltParseError {
     }
 }
 
+/// Errors that can happen during parsing
 #[derive(Error, Debug, PartialEq)]
 pub enum DltParseError {
     #[error("parsing stopped, cannot continue: {0}")]
@@ -115,12 +116,17 @@ impl From<nom::Err<(&[u8], nom::error::ErrorKind)>> for DltParseError {
     }
 }
 
-/// skip ahead in input array till we reach a storage header
-/// return Some(dropped, rest_slice) that starts with the next storage header (if any)
-/// or None if no more storage header could be found.
-/// dropped is the number of bytes that were skipped
-/// note: we won't skip anything if the input already begins
-/// with a storage header
+/// Skips ahead in input array up to the next storage header
+///
+/// Returns the number of dropped bytes along with the remaining slice.
+/// If no next storage header can be found, `None` is returned.
+///
+/// Note: will not skip anything if the input already begins with a storage header.
+///
+/// # Arguments
+///
+/// * `input` - A slice of bytes that contain dlt messages including storage headers
+///
 pub fn forward_to_next_storage_header(input: &[u8]) -> Option<(u64, &[u8])> {
     let mut found = false;
     let mut to_drop = 0usize;
@@ -333,13 +339,14 @@ pub(crate) fn dlt_extended_header(input: &[u8]) -> IResult<&[u8], ExtendedHeader
 }
 
 #[inline]
-pub fn is_not_null(chr: u8) -> bool {
+fn is_not_null(chr: u8) -> bool {
     chr != 0x0
 }
 
+/// Extracts the string in a byte sequence up to the `\0` termination character
+///
 /// In various places within the DLT message, there can be strings that are
-/// terminated with a \0. This parser extracts the string in a byte sequence
-/// up to the \0 termination character
+/// terminated with a `\0`.
 pub fn dlt_zero_terminated_string(s: &[u8], size: usize) -> IResult<&[u8], &str, DltParseError> {
     let (rest_with_null, content_without_null) = take_while_m_n(0, size, is_not_null)(s)?;
     let res_str = match nom::lib::std::str::from_utf8(content_without_null) {
@@ -815,6 +822,8 @@ fn dbg_parsed<T: std::fmt::Debug>(_name: &str, _before: &[u8], _after: &[u8], _v
     }
 }
 
+/// Used when producing messages in a stream, indicates if messages
+/// where filtered or could not be parsed
 #[derive(Debug, PartialEq)]
 pub enum ParsedMessage {
     /// Regular message, could be parsed
@@ -874,7 +883,7 @@ pub fn dlt_message<'a>(
     dlt_message_intern(input, filter_config_opt, with_storage_header).map_err(DltParseError::from)
 }
 
-pub fn dlt_message_intern<'a>(
+fn dlt_message_intern<'a>(
     input: &'a [u8],
     filter_config_opt: Option<&filtering::ProcessedDltFilterConfig>,
     with_storage_header: bool,
@@ -1060,8 +1069,7 @@ pub(crate) fn skip_till_after_next_storage_header(
     }
 }
 
-/// check if the DLT_PATTERN next and just skip the storage header if so
-/// returns a slice where the storage header was removed
+/// Remove the storage header from the input if present
 pub fn skip_storage_header(input: &[u8]) -> IResult<&[u8], u64, DltParseError> {
     let (i, (_, _, _)): (&[u8], _) = tuple((tag("DLT"), tag(&[0x01]), take(12usize)))(input)?;
     if input.len() - i.len() == STORAGE_HEADER_LENGTH as usize {
@@ -1073,6 +1081,7 @@ pub fn skip_storage_header(input: &[u8]) -> IResult<&[u8], u64, DltParseError> {
     }
 }
 
+/// Skip one dlt message in the input stream in an efficient way
 pub fn dlt_consume_msg(input: &[u8]) -> IResult<&[u8], Option<u64>, DltParseError> {
     let (after_storage_header, skipped_bytes) = skip_storage_header(input)?;
     let (_, header) = dlt_standard_header(after_storage_header)?;

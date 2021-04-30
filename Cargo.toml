@@ -1,6 +1,6 @@
 [package]
 name = "dlt-core"
-version = "0.9.1"
+version = "0.9.2"
 authors = ["Oliver Mueller <oliver.mueller@esrlabs.com>"]
 edition = "2018"
 description = """
@@ -10,7 +10,6 @@ license-file = "LICENSE.txt"
 repository = "https://github.com/esrlabs/dlt-core"
 
 [dependencies]
-buf_redux = "0.8"
 byteorder = "1.4"
 bytes = "1.0"
 chrono = "0.4"

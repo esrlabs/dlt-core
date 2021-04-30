@@ -1,3 +1,16 @@
+// Copyright (c) 2021 ESR Labs GmbH. All rights reserved.
+//
+// NOTICE:  All information contained herein is, and remains
+// the property of E.S.R.Labs and its suppliers, if any.
+// The intellectual and technical concepts contained herein are
+// proprietary to E.S.R.Labs and its suppliers and may be covered
+// by German and Foreign Patents, patents in process, and are protected
+// by trade secret or copyright law.
+// Dissemination of this information or reproduction of this material
+// is strictly forbidden unless prior written permission is obtained
+// from E.S.R.Labs.
+
+//! # Formatting dlt messages as text
 use crate::{
     dlt::{
         float_width_to_type_length, ApplicationTraceType, Argument, ControlType, DltTimeStamp,
@@ -18,9 +31,9 @@ use std::{
     str,
 };
 
-pub const DLT_COLUMN_SENTINAL: char = '\u{0004}';
-pub const DLT_ARGUMENT_SENTINAL: char = '\u{0005}';
-pub const DLT_NEWLINE_SENTINAL_SLICE: &[u8] = &[0x6];
+const DLT_COLUMN_SENTINAL: char = '\u{0004}';
+const DLT_ARGUMENT_SENTINAL: char = '\u{0005}';
+const DLT_NEWLINE_SENTINAL_SLICE: &[u8] = &[0x6];
 
 lazy_static::lazy_static! {
     static ref DLT_NEWLINE_SENTINAL_STR: &'static str =
@@ -190,6 +203,8 @@ impl fmt::Display for LogLevel {
         }
     }
 }
+
+/// A dlt message that can be formatted with optional FIBEX data support
 pub struct FormattableMessage<'a> {
     pub message: Message,
     pub fibex_metadata: Option<&'a FibexMetadata>,

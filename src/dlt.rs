@@ -1,4 +1,4 @@
-// Copyright (c) 2019 E.S.R.Labs. All rights reserved.
+// Copyright (c) 2021 ESR Labs GmbH. All rights reserved.
 //
 // NOTICE:  All information contained herein is, and remains
 // the property of E.S.R.Labs and its suppliers, if any.
@@ -18,7 +18,7 @@
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
 use bytes::{BufMut, BytesMut};
 use serde::Serialize;
-use std::str;
+use std::{convert::TryFrom, str};
 use thiserror::Error;
 
 #[cfg(test)]
@@ -28,6 +28,7 @@ use proptest::prelude::*;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 
+/// Error constructing or converting DLT types
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Unexpected value found: {0}")]
@@ -38,6 +39,7 @@ pub enum Error {
     Io(#[from] std::io::Error),
 }
 
+/// Used to express the byte order of DLT data type fields
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord, Serialize)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub enum Endianness {
@@ -56,6 +58,7 @@ pub struct Message {
     pub payload: PayloadContent,
 }
 
+/// Add some stupid docs
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub struct StorageHeader {
@@ -77,6 +80,14 @@ pub struct StandardHeader {
     pub payload_length: u16,
 }
 
+/// The Extended header contains additional information about a DLT message.
+///
+/// In case the `UEH` bit of the Standard Header is set go `1`, additional
+/// information is transmitted which are defined in the Dlt Extended Header
+/// format.
+///
+/// The Dlt Extended Header is directly attached after the Dlt Standard Header fields.
+///
 /// The Extended Header shall be in big endian format
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(test, derive(Arbitrary))]
@@ -296,6 +307,7 @@ impl StandardHeader {
     }
 }
 
+/// Representation of log levels used in DLT log messages
 #[derive(Debug, PartialEq, PartialOrd, Clone, Copy, Serialize)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub enum LogLevel {
@@ -309,6 +321,10 @@ pub enum LogLevel {
     Invalid(u8),
 }
 
+/// Represents the kind of a `DLT Trace Message`
+///
+/// In case the dlt message contains tracing information, the Trace-Type
+/// indicates different kinds of trace message types
 #[derive(Debug, PartialEq, Clone, Serialize)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub enum ApplicationTraceType {
@@ -324,6 +340,10 @@ pub enum ApplicationTraceType {
     Invalid(u8),
 }
 
+/// Represents the kind of a `DLT Network Message`
+///
+/// In case the dlt message contains networking information,
+/// the Trace-Type indicates different kinds of network message types
 #[derive(Debug, PartialEq, Clone, Serialize)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub enum NetworkTraceType {
@@ -343,6 +363,11 @@ pub enum NetworkTraceType {
 
 const CTRL_TYPE_REQUEST: u8 = 0x1;
 const CTRL_TYPE_RESPONSE: u8 = 0x2;
+
+/// Represents the kind of a `DLT Control Message`
+///
+/// In case the dlt message contains control information,
+/// the Trace-Type indicates different kinds of control message types
 #[derive(Debug, PartialEq, Clone, Serialize)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub enum ControlType {
@@ -368,6 +393,7 @@ impl ControlType {
     }
 }
 
+/// Part of the extended header, distinguishes log, trace and controll messages
 #[derive(Debug, PartialEq, Clone, Serialize)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub enum MessageType {
@@ -432,12 +458,15 @@ pub enum FixedPointValue {
     I32(i32),
     I64(i64),
 }
-pub fn fixed_point_value_width(v: &FixedPointValue) -> usize {
+
+pub(crate) fn fixed_point_value_width(v: &FixedPointValue) -> usize {
     match v {
         FixedPointValue::I32(_) => 4,
         FixedPointValue::I64(_) => 8,
     }
 }
+
+/// Represents the value of an DLT argument
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub enum Value {
     Bool(u8),
@@ -457,6 +486,7 @@ pub enum Value {
     Raw(Vec<u8>),
 }
 
+/// Defines what string type is used, `ASCII` or `UTF8`
 #[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(test, derive(Arbitrary))]
@@ -469,19 +499,22 @@ pub enum StringCoding {
     )]
     Reserved(u8),
 }
+
+/// Represents the bit width of a floatingpoint value type
 #[derive(Debug, Clone, PartialEq, Copy, Serialize)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub enum FloatWidth {
     Width32 = 32,
     Width64 = 64,
 }
-pub fn float_width_to_type_length(width: FloatWidth) -> TypeLength {
+pub(crate) fn float_width_to_type_length(width: FloatWidth) -> TypeLength {
     match width {
         FloatWidth::Width32 => TypeLength::BitLength32,
         FloatWidth::Width64 => TypeLength::BitLength64,
     }
 }
 
+/// Represents the bit width of a value type
 #[derive(Debug, Clone, PartialEq, Copy, Serialize)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub enum TypeLength {
@@ -514,6 +547,8 @@ impl TypeLength {
 }
 
 /// Part of the TypeInfo that specifies what kind of type is encoded
+///
+/// the Array type is not yet supported and honestly I never saw anyone using it
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub enum TypeInfoKind {
@@ -531,26 +566,32 @@ pub enum TypeInfoKind {
 }
 
 ///
-/// TypeInfo is a 32 bit field. It is encoded the following way:
-///     * Bit0-3    Type Length (TYLE)  -> TypeKindInfo
-///     * Bit 4     Type Bool (BOOL)    -> TypeKindInfo
-///     * Bit 5     Type Signed (SINT)  -> TypeKindInfo
-///     * Bit 6     Type Unsigned (UINT) -> TypeKindInfo
-///     * Bit 7     Type Float (FLOA)   -> TypeKindInfo
-///     * Bit 8     Type Array (ARAY)   -> TypeKindInfo
-///     * Bit 9     Type String (STRG)  -> TypeKindInfo
-///     * Bit 10    Type Raw (RAWD)     -> TypeKindInfo
-///     * Bit 11    Variable Info (VARI)
-///     * Bit 12    Fixed Point (FIXP)  -> TypeKindInfo
-///     * Bit 13    Trace Info (TRAI)
-///     * Bit 14    Type Struct (STRU)  -> TypeKindInfo
-///     * Bit15–17  String Coding (SCOD)
-///     * Bit18–31  reserved for future use
+/// The Type Info contains meta data about the data payload.
 ///
-/// has_variable_info: If Variable Info (VARI) is set, the name and the unit of a variable can be added.
-/// Both always contain a length information field and a field with the text (of name or unit).
-/// The length field contains the number of characters of the associated name or unit filed.
-/// The unit information is to add only in some data types.
+/// `TypeInfo` is a 32 bit field. It is encoded the following way:
+/// ``` text
+///     * Bit 0-3   Type Length (TYLE)
+///     * Bit 4     Type Bool (BOOL)
+///     * Bit 5     Type Signed (SINT)
+///     * Bit 6     Type Unsigned (UINT)
+///     * Bit 7     Type Float (FLOA)
+///     * Bit 8     Type Array (ARAY)
+///     * Bit 9     Type String (STRG)
+///     * Bit 10    Type Raw (RAWD)
+///     * Bit 11    Variable Info (VARI)
+///     * Bit 12    Fixed Point (FIXP)
+///     * Bit 13    Trace Info (TRAI)
+///     * Bit 14    Type Struct (STRU)
+///     * Bit 15–17 String Coding (SCOD)
+///     * Bit 18–31 reserved for future use
+/// ```
+///
+/// ## Bit Variable Info (VARI)
+/// If Variable Info (VARI) is set, the name and the unit of a variable
+/// can be added. Both always contain a length information field and a
+/// field with the text (of name or unit). The length field contains the
+/// number of characters of the associated name or unit filed. The unit
+/// information is to add only in some data types.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub struct TypeInfo {
@@ -738,6 +779,14 @@ pub struct FixedPoint {
     pub quantization: f32,
     pub offset: FixedPointValue,
 }
+
+/// Represents an argument in the payload of a DLT message.
+///
+/// Each argument consists of the type-info and a data payload.
+/// This payload contains the value of the variable (i.e. the debug
+/// information of an application). In addition to the variable value
+/// itself, it is needed to provide information like size and type
+/// of the variable. This information is contained in the `type_info` field.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Argument {
     pub type_info: TypeInfo,
@@ -746,6 +795,7 @@ pub struct Argument {
     pub fixed_point: Option<FixedPoint>,
     pub value: Value,
 }
+
 impl Argument {
     fn value_as_f64(&self) -> Option<f64> {
         match self.value {
@@ -760,6 +810,7 @@ impl Argument {
             _ => None,
         }
     }
+
     fn log_v(&self) -> Option<u64> {
         match &self.fixed_point {
             Some(FixedPoint {
@@ -782,6 +833,7 @@ impl Argument {
             _ => None,
         }
     }
+
     pub(crate) fn to_real_value(&self) -> Option<u64> {
         match (&self.type_info.kind, &self.fixed_point) {
             (TypeInfoKind::SignedFixedPoint(_), Some(_)) => self.log_v(),
@@ -789,6 +841,7 @@ impl Argument {
             _ => None,
         }
     }
+
     #[allow(dead_code)]
     pub fn valid(&self) -> bool {
         let mut valid = true;
@@ -809,9 +862,7 @@ impl Argument {
         }
         valid
     }
-    pub fn len_old<T: ByteOrder>(&self) -> usize {
-        self.as_bytes::<T>().len()
-    }
+
     fn fixed_point_capacity(&self, float_width: FloatWidth) -> usize {
         let mut capacity = float_width.width_in_bytes();
         if let Some(fp) = &self.fixed_point {
@@ -820,7 +871,7 @@ impl Argument {
         capacity
     }
 
-    pub fn len_new(self: &Argument) -> usize {
+    pub fn len(self: &Argument) -> usize {
         let name_space = match &self.name {
             Some(n) => 2 /* length of name */ + n.len() + 1,
             _ => 0,
@@ -871,10 +922,7 @@ impl Argument {
     }
 
     pub fn is_empty<T: ByteOrder>(&self) -> bool {
-        let old_len = self.len_old::<T>();
-        let new_len = self.len_new();
-        assert_eq!(old_len, new_len);
-        new_len == 0
+        self.len() == 0
     }
 
     fn mut_buf_with_typeinfo_name<T: ByteOrder>(
@@ -897,6 +945,7 @@ impl Argument {
         }
         buf
     }
+
     fn mut_buf_with_typeinfo_name_unit<T: ByteOrder>(
         &self,
         info: &TypeInfo,
@@ -904,13 +953,6 @@ impl Argument {
         unit: &Option<String>,
         fixed_point: &Option<FixedPoint>,
     ) -> BytesMut {
-        // trace!(
-        //     "mut_buf_with_typeinfo_name_unit (info: {:?}) {:?}/{:?} (fp: {:?})",
-        //     info,
-        //     name,
-        //     unit,
-        //     fixed_point
-        // );
         let mut capacity = TYPE_INFO_LENGTH;
         if info.has_variable_info {
             if let Some(n) = name {
@@ -935,7 +977,6 @@ impl Argument {
             if let Some(n) = name {
                 T::write_u16(&mut tmp_buf, n.len() as u16 + 1);
                 buf.extend_from_slice(&tmp_buf);
-            // trace!("put name len: {:02X?}", buf.to_vec());
             } else {
                 T::write_u16(&mut tmp_buf, 1u16);
                 buf.extend_from_slice(&tmp_buf);
@@ -943,7 +984,6 @@ impl Argument {
             if let Some(u) = unit {
                 T::write_u16(&mut tmp_buf, u.len() as u16 + 1);
                 buf.extend_from_slice(&tmp_buf);
-            // trace!("put unit len: {:02X?}", buf.to_vec());
             } else {
                 T::write_u16(&mut tmp_buf, 1u16);
                 buf.extend_from_slice(&tmp_buf);
@@ -951,14 +991,12 @@ impl Argument {
             if let Some(n) = name {
                 buf.extend_from_slice(n.as_bytes());
                 buf.put_u8(0x0); // null termination
-                                 // trace!("put name: {:02X?}", buf.to_vec());
             } else {
                 buf.put_u8(0x0); // only null termination
             }
             if let Some(u) = unit {
                 buf.extend_from_slice(u.as_bytes());
                 buf.put_u8(0x0); // null termination
-                                 // trace!("put unit: {:02X?}", buf.to_vec());
             } else {
                 buf.put_u8(0x0); // only null termination
             }
@@ -980,10 +1018,10 @@ impl Argument {
                 }
             }
         }
-        // trace!("typeinfo + name + unit as bytes: {:02X?}", buf.to_vec());
         buf
     }
 
+    /// Serialize an argument into a byte array
     pub fn as_bytes<T: ByteOrder>(self: &Argument) -> Vec<u8> {
         match self.type_info.kind {
             TypeInfoKind::Bool => {
@@ -1208,6 +1246,7 @@ impl Argument {
         }
     }
 }
+
 fn put_unsigned_value<T: ByteOrder>(value: &Value, buf: &mut BytesMut) {
     match value {
         Value::U8(v) => buf.put_u8(*v),
@@ -1297,11 +1336,6 @@ impl PayloadContent {
                 }
             }
             PayloadContent::NonVerbose(msg_id, payload) => {
-                // trace!(
-                //     "...Payload2::as_bytes, writing nonverbose, buf.len = {}",
-                //     buf.len()
-                // );
-
                 let mut tmp_buf = [0; 4];
                 T::write_u32(&mut tmp_buf, *msg_id);
                 buf.extend_from_slice(&tmp_buf);
@@ -1309,10 +1343,6 @@ impl PayloadContent {
                 buf.extend_from_slice(&payload[..]);
             }
             PayloadContent::ControlMsg(ctrl_id, payload) => {
-                // trace!(
-                //     "...Payload2::as_bytes, writing ControlType, buf.len = {}",
-                //     buf.len()
-                // );
                 #[allow(deprecated)]
                 buf.put_u8(ctrl_id.value());
                 buf.extend_from_slice(&payload[..]);
@@ -1325,9 +1355,7 @@ impl PayloadContent {
 fn payload_content_len<T: ByteOrder>(content: &PayloadContent) -> usize {
     match content {
         PayloadContent::Verbose(args) => args.iter().fold(0usize, |mut sum, arg| {
-            let old_len = arg.len_old::<T>();
-            let new_len = arg.len_new();
-            assert_eq!(old_len, new_len);
+            let new_len = arg.len();
             sum += new_len;
             sum
         }),
@@ -1336,12 +1364,15 @@ fn payload_content_len<T: ByteOrder>(content: &PayloadContent) -> usize {
     }
 }
 
+/// Configuration options for the extended header
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ExtendedHeaderConfig {
     pub message_type: MessageType,
     pub app_id: String,
     pub context_id: String,
 }
+
+/// Configuration options for a DLT message, used when constructing a message
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct MessageConfig {
     pub version: u8,
@@ -1356,7 +1387,7 @@ pub struct MessageConfig {
 
 #[inline]
 fn dbg_bytes_with_info(_name: &str, _bytes: &[u8], _info: Option<&str>) {
-    // #[cfg(feature = "debug_parser")]
+    #[cfg(feature = "debug_parser")]
     {
         trace!(
             "writing {}: {} {:02X?} {}",
@@ -1367,10 +1398,12 @@ fn dbg_bytes_with_info(_name: &str, _bytes: &[u8], _info: Option<&str>) {
         );
     }
 }
+
 #[inline]
 fn dbg_bytes(_name: &str, _bytes: &[u8]) {
     dbg_bytes_with_info(_name, _bytes, None);
 }
+
 impl Message {
     pub fn new(conf: MessageConfig, storage_header: Option<StorageHeader>) -> Self {
         let payload_length = if conf.endianness == Endianness::Big {
@@ -1493,15 +1526,6 @@ impl From<LogLevel> for log::Level {
     }
 }
 
-pub trait TryFrom<T>: Sized {
-    /// The type returned in the event of a conversion error.
-    type Error;
-
-    /// Performs the conversion. optionally supply an index to identify the
-    /// dlt message in a log or stream
-    fn try_from(value: T) -> Result<Self, Self::Error>;
-}
-
 pub(crate) const DEFAULT_ECU_ID: &str = "ECU";
 // StorageHeader
 pub(crate) const STORAGE_HEADER_LENGTH: u64 = 16;
@@ -1536,7 +1560,8 @@ pub(crate) const TYPE_INFO_TRACE_INFO_FLAG: u32 = 1 << 13;
 pub(crate) const TYPE_INFO_STRUCT_FLAG: u32 = 1 << 14;
 
 // TODO use header struct not u8
-pub fn calculate_standard_header_length(header_type: u8) -> u16 {
+/// Use header type to determine the length of the standard header
+pub(crate) fn calculate_standard_header_length(header_type: u8) -> u16 {
     let mut length = HEADER_MIN_LENGTH;
     if (header_type & WITH_ECU_ID_FLAG) != 0 {
         length += 4;
@@ -1551,22 +1576,13 @@ pub fn calculate_standard_header_length(header_type: u8) -> u16 {
 }
 
 // TODO use header struct not u8
-pub fn calculate_all_headers_length(header_type: u8) -> u16 {
+/// Use header type to determine the length of the all headers together
+pub(crate) fn calculate_all_headers_length(header_type: u8) -> u16 {
     let mut length = calculate_standard_header_length(header_type);
     if (header_type & WITH_EXTENDED_HEADER_FLAG) != 0 {
         length += EXTENDED_HEADER_LENGTH;
     }
     length
-}
-
-pub fn zero_terminated_string(raw: &[u8]) -> Result<String, Error> {
-    let nul_range_end = raw
-        .iter()
-        .position(|&c| c == b'\0')
-        .unwrap_or_else(|| raw.len()); // default to length if no `\0` present
-    str::from_utf8(&raw[0..nul_range_end])
-        .map(|v| v.to_owned())
-        .map_err(|e| Error::InvalidData(format!("Invalid zero_terminated_string: {}", e)))
 }
 
 pub(crate) const LEVEL_FATAL: u8 = 0x1;
