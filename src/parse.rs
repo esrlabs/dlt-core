@@ -382,47 +382,28 @@ pub(crate) trait NomByteOrder: Clone + Copy + Eq + Ord + PartialEq + PartialOrd 
     fn to_string(input: &[u8], width: usize) -> String;
 }
 
+macro_rules! impl_nombyteorder{($($fn_trait:ident $fn_nom:ident $tp:ident ,)*) => {
+    $(
+        #[inline]
+        fn $fn_trait(i: &[u8]) -> IResult<&[u8], $tp, DltParseError> {
+            $fn_nom(i)
+        }
+    )*
+}}
+
 impl NomByteOrder for BigEndian {
-    #[inline]
-    fn parse_u16(i: &[u8]) -> IResult<&[u8], u16, DltParseError> {
-        be_u16(i)
-    }
-    #[inline]
-    fn parse_i16(i: &[u8]) -> IResult<&[u8], i16, DltParseError> {
-        be_i16(i)
-    }
-    #[inline]
-    fn parse_u32(i: &[u8]) -> IResult<&[u8], u32, DltParseError> {
-        be_u32(i)
-    }
-    #[inline]
-    fn parse_i32(i: &[u8]) -> IResult<&[u8], i32, DltParseError> {
-        be_i32(i)
-    }
-    #[inline]
-    fn parse_f32(i: &[u8]) -> IResult<&[u8], f32, DltParseError> {
-        be_f32(i)
-    }
-    #[inline]
-    fn parse_u64(i: &[u8]) -> IResult<&[u8], u64, DltParseError> {
-        be_u64(i)
-    }
-    #[inline]
-    fn parse_i64(i: &[u8]) -> IResult<&[u8], i64, DltParseError> {
-        be_i64(i)
-    }
-    #[inline]
-    fn parse_f64(i: &[u8]) -> IResult<&[u8], f64, DltParseError> {
-        be_f64(i)
-    }
-    #[inline]
-    fn parse_u128(i: &[u8]) -> IResult<&[u8], u128, DltParseError> {
-        be_u128(i)
-    }
-    #[inline]
-    fn parse_i128(i: &[u8]) -> IResult<&[u8], i128, DltParseError> {
-        be_i128(i)
-    }
+    impl_nombyteorder!(
+        parse_u16 be_u16 u16,
+        parse_i16 be_i16 i16,
+        parse_u32 be_u32 u32,
+        parse_i32 be_i32 i32,
+        parse_f32 be_f32 f32,
+        parse_u64 be_u64 u64,
+        parse_i64 be_i64 i64,
+        parse_f64 be_f64 f64,
+        parse_u128 be_u128 u128,
+        parse_i128 be_i128 i128,
+    );
     fn to_string(input: &[u8], width: usize) -> String {
         let v = input
             .iter()
@@ -454,46 +435,18 @@ fn dlt_variable_name_and_unit<T: NomByteOrder>(
 }
 
 impl NomByteOrder for LittleEndian {
-    #[inline]
-    fn parse_u16(i: &[u8]) -> IResult<&[u8], u16, DltParseError> {
-        le_u16(i)
-    }
-    #[inline]
-    fn parse_i16(i: &[u8]) -> IResult<&[u8], i16, DltParseError> {
-        le_i16(i)
-    }
-    #[inline]
-    fn parse_u32(i: &[u8]) -> IResult<&[u8], u32, DltParseError> {
-        le_u32(i)
-    }
-    #[inline]
-    fn parse_i32(i: &[u8]) -> IResult<&[u8], i32, DltParseError> {
-        le_i32(i)
-    }
-    #[inline]
-    fn parse_f32(i: &[u8]) -> IResult<&[u8], f32, DltParseError> {
-        le_f32(i)
-    }
-    #[inline]
-    fn parse_u64(i: &[u8]) -> IResult<&[u8], u64, DltParseError> {
-        le_u64(i)
-    }
-    #[inline]
-    fn parse_i64(i: &[u8]) -> IResult<&[u8], i64, DltParseError> {
-        le_i64(i)
-    }
-    #[inline]
-    fn parse_f64(i: &[u8]) -> IResult<&[u8], f64, DltParseError> {
-        le_f64(i)
-    }
-    #[inline]
-    fn parse_u128(i: &[u8]) -> IResult<&[u8], u128, DltParseError> {
-        le_u128(i)
-    }
-    #[inline]
-    fn parse_i128(i: &[u8]) -> IResult<&[u8], i128, DltParseError> {
-        le_i128(i)
-    }
+    impl_nombyteorder!(
+        parse_u16 le_u16 u16,
+        parse_i16 le_i16 i16,
+        parse_u32 le_u32 u32,
+        parse_i32 le_i32 i32,
+        parse_f32 le_f32 f32,
+        parse_u64 le_u64 u64,
+        parse_i64 le_i64 i64,
+        parse_f64 le_f64 f64,
+        parse_u128 le_u128 u128,
+        parse_i128 le_i128 i128,
+    );
     fn to_string(input: &[u8], width: usize) -> String {
         let v = input
             .iter()
