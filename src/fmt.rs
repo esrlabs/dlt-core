@@ -322,16 +322,16 @@ impl Message {
                     "{}{}{}{}",
                     application_id
                         .as_ref()
-                        .map(|id| &**id)
+                        .map(|id| &*id.as_str())
                         .or_else(|| self
                             .extended_header
                             .as_ref()
-                            .map(|h| h.application_id.as_ref()))
+                            .map(|h| h.application_id.as_str()))
                         .unwrap_or("-"),
                     DLT_COLUMN_SENTINAL,
                     context_id
                         .as_ref()
-                        .map(|id| &**id)
+                        .map(|id| &*id.as_str())
                         .or_else(|| self.extended_header.as_ref().map(|h| h.context_id.as_ref()))
                         .unwrap_or("-"),
                     DLT_COLUMN_SENTINAL

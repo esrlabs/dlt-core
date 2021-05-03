@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.3] - 2021-05-03
+### Changed
+- Removed pcap-parser library dependency by introducing a feature
+
 ## [0.9.2] - 2021-04-30
 ### Added
 - More documentation for API

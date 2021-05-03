@@ -80,6 +80,7 @@ impl From<std::io::Error> for DltParseError {
     }
 }
 
+#[cfg(feature = "pcap")]
 impl From<pcap_parser::PcapError> for DltParseError {
     fn from(err: pcap_parser::PcapError) -> DltParseError {
         DltParseError::Unrecoverable(format!("{}", err))
