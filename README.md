@@ -8,7 +8,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-dlt_core = "1.0"
+dlt_core = "0.9"
 ```
 
 This is an example of how to parse a message and serialize it back to a byte array.
