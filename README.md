@@ -1,5 +1,5 @@
 [![LICENSE](https://img.shields.io/github/license/esrlabs/dlt-core?color=blue)](LICENSE.txt)
-[![](https://github.com/esrlabs/dlt-core/workflows/check.yml/badge.svg)](https://github.com/esrlabs/dlt-core/actions)
+[![](https://github.com/esrlabs/dlt-core/workflows/CI/badge.svg)](https://github.com/esrlabs/dlt-core/actions)
 
 # Autosar DLT Support
 
