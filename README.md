@@ -1,3 +1,6 @@
+[![LICENSE](https://img.shields.io/github/license/esrlabs/dlt-core?color=blue)](LICENSE.txt)
+[![](https://github.com/esrlabs/dlt-core/workflows/check.yml/badge.svg)](https://github.com/esrlabs/dlt-core/actions)
+
 # Autosar DLT Support
 
 A library that support efficient parsing & writing log-messages encoded as `Diagnositic` `Log` and `Trace` messages.
