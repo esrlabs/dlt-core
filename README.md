@@ -1,5 +1,6 @@
 [![LICENSE](https://img.shields.io/github/license/esrlabs/dlt-core?color=blue)](LICENSE.txt)
 [![](https://github.com/esrlabs/dlt-core/workflows/CI/badge.svg)](https://github.com/esrlabs/dlt-core/actions)
+[![codecov](https://codecov.io/gh/esrlabs/dlt-core/branch/main/graph/badge.svg?token=GCUGZMVVNY)](https://codecov.io/gh/esrlabs/dlt-core)
 
 # Autosar DLT Support
 
