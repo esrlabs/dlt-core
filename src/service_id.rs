@@ -12,6 +12,7 @@
 
 //! # official supported DLT service ids
 use std::collections::HashMap;
+
 lazy_static::lazy_static! {
     /// Contains all the official service ids with it's u8 representation
     #[rustfmt::skip]

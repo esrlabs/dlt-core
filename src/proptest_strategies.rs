@@ -120,9 +120,9 @@ pub fn message_with_storage_header_strat() -> impl Strategy<Value = Message> {
     })
 }
 
-pub fn messages_strat(len: usize) -> impl Strategy<Value = Vec<Message>> {
-    prop::collection::vec(message_strat(), 0..len)
-}
+// pub fn messages_strat(len: usize) -> impl Strategy<Value = Vec<Message>> {
+//     prop::collection::vec(message_strat(), 0..len)
+// }
 
 pub fn stored_messages_strat(len: usize) -> impl Strategy<Value = Vec<Message>> {
     prop::collection::vec(message_with_storage_header_strat(), 0..len)
@@ -179,29 +179,12 @@ fn value_strategy(info: &TypeInfo) -> impl Strategy<Value = Value> {
         }
     }
 }
-#[allow(dead_code)]
-fn vec_and_index() -> impl Strategy<Value = (Vec<String>, usize)> {
-    prop::collection::vec(".*", 1..100).prop_flat_map(|vec| {
-        let len = vec.len();
-        (Just(vec), 0..len)
-    })
-}
-prop_compose! {
-    fn vec_and_index2()
-    ((v, i) in
-        prop::collection::vec(".*", 1..100).prop_flat_map(|vec| {
-            let len = vec.len();
-            (Just(vec), 0..len)
-        })
-    ) -> (Vec<String>, usize) {
-        (v, i)
-    }
-}
 
 // only produces None values
 fn fp_none_strategy() -> impl Strategy<Value = Option<FixedPoint>> {
     Just(None)
 }
+
 fn fp_strategy(width: FloatWidth) -> impl Strategy<Value = FixedPoint> {
     let fp_value_strat = if width == FloatWidth::Width32 {
         any::<i32>().prop_map(FixedPointValue::I32).boxed()
@@ -213,6 +196,7 @@ fn fp_strategy(width: FloatWidth) -> impl Strategy<Value = FixedPoint> {
         offset,
     })
 }
+
 // strategy that produces TypeInfo and matching optional FixedPoint for arguments
 fn type_info_and_fixed_point_strategy() -> impl Strategy<
     Value = (
@@ -245,9 +229,7 @@ pub fn argument_strategy() -> impl Strategy<Value = Argument> {
     })
     // any::<Argument>()
 }
-pub fn argument_vector_strategy() -> impl Strategy<Value = Vec<Argument>> {
-    prop::collection::vec(argument_strategy(), 0..2)
-}
+
 fn payload_strategy(count: usize) -> impl Strategy<Value = PayloadContent> {
     if count == 0 {
         Just(PayloadContent::Verbose(vec![])).boxed()
@@ -257,6 +239,7 @@ fn payload_strategy(count: usize) -> impl Strategy<Value = PayloadContent> {
             .boxed()
     }
 }
+
 fn non_verbose_payload_strategy() -> impl Strategy<Value = PayloadContent> {
     prop_oneof![
         (0..10u32, prop::collection::vec(any::<u8>(), 0..5))
@@ -268,6 +251,7 @@ fn non_verbose_payload_strategy() -> impl Strategy<Value = PayloadContent> {
             .prop_map(|(a, b)| PayloadContent::ControlMsg(a, b))
     ]
 }
+
 // strategy to produce signed TypeInfoKinds for only 32 and 64 bit width fixed point or
 // any other regular signed value
 pub fn signed_strategy() -> impl Strategy<Value = TypeInfoKind> {
@@ -276,6 +260,7 @@ pub fn signed_strategy() -> impl Strategy<Value = TypeInfoKind> {
         any::<TypeLength>().prop_flat_map(|width| Just(TypeInfoKind::Signed(width)))
     ]
 }
+
 // strategy to produce unsigned TypeInfoKinds for only 32 and 64 bit width
 pub fn unsigned_strategy() -> impl Strategy<Value = TypeInfoKind> {
     prop_oneof![
@@ -283,6 +268,11 @@ pub fn unsigned_strategy() -> impl Strategy<Value = TypeInfoKind> {
         any::<TypeLength>().prop_flat_map(|width| Just(TypeInfoKind::Unsigned(width)))
     ]
 }
+
+pub fn argument_vector_strategy() -> impl Strategy<Value = Vec<Argument>> {
+    prop::collection::vec(argument_strategy(), 0..2)
+}
+
 fn extheader_payload_endian_strategy(
 ) -> impl Strategy<Value = (ExtendedHeader, PayloadContent, Endianness)> {
     any::<ExtendedHeader>().prop_flat_map(|ext_h| {

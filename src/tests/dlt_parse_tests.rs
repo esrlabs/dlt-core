@@ -406,7 +406,6 @@ mod tests {
             }),
         };
         let msg = Message::new(msg_conf, None);
-        println!("--> test_parse_msg: msg: {:?}", msg);
         let mut msg_bytes = msg.as_bytes();
         dump_to_file(&msg_bytes).expect("could not dump bytes");
         println!("--> test_parse_msg: msg_bytes: {:02X?}", msg_bytes);
