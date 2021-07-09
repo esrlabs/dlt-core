@@ -1,10 +1,16 @@
 [![LICENSE](https://img.shields.io/github/license/esrlabs/dlt-core?color=blue)](LICENSE.txt)
 [![](https://github.com/esrlabs/dlt-core/workflows/CI/badge.svg)](https://github.com/esrlabs/dlt-core/actions)
-[![codecov](https://codecov.io/gh/esrlabs/dlt-core/branch/main/graph/badge.svg?token=GCUGZMVVNY)](https://codecov.io/gh/esrlabs/dlt-core)
 
 # Autosar DLT Support
 
 A library that support efficient parsing & writing log-messages encoded as `Diagnositic` `Log` and `Trace` messages.
+
+## Features
+
+* compliant with the official Autosar DLT specification
+* efficiently parse binary DLT content
+* serialize DLT messages
+* support for non-verbose messages via FIBEX file information
 
 ## Usage
 
@@ -12,7 +18,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-dlt_core = "0.9"
+dlt_core = "0.10"
 ```
 
 This is an example of how to parse a message and serialize it back to a byte array.

@@ -853,15 +853,15 @@ fn dlt_message_intern<'a>(
         dbg_parsed(
             "storage header",
             &input[(*shifted as usize)..],
-            &after_storage_header,
+            after_storage_header,
             &storage_header,
         )
     };
     let (after_storage_and_normal_header, header) = dlt_standard_header(after_storage_header)?;
     dbg_parsed(
         "normal header",
-        &after_storage_header,
-        &after_storage_and_normal_header,
+        after_storage_header,
+        after_storage_and_normal_header,
         &header,
     );
 
@@ -877,8 +877,8 @@ fn dlt_message_intern<'a>(
         is_controll_msg = matches!(ext_header.message_type, MessageType::Control(_));
         dbg_parsed(
             "extended header",
-            &after_storage_and_normal_header,
-            &rest,
+            after_storage_and_normal_header,
+            rest,
             &ext_header,
         );
         (rest, Some(ext_header))
@@ -924,7 +924,7 @@ fn dlt_message_intern<'a>(
             is_controll_msg,
         )?
     };
-    dbg_parsed("payload", &after_headers, &i, &payload);
+    dbg_parsed("payload", after_headers, i, &payload);
     Ok((
         i,
         ParsedMessage::Item(Message {

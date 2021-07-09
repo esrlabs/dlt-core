@@ -1327,7 +1327,7 @@ impl PayloadContent {
     }
 
     pub(crate) fn as_bytes<T: ByteOrder>(&self) -> Vec<u8> {
-        let mut buf = BytesMut::with_capacity(payload_content_len::<T>(&self));
+        let mut buf = BytesMut::with_capacity(payload_content_len::<T>(self));
         match &self {
             PayloadContent::Verbose(args) => {
                 for arg in args {

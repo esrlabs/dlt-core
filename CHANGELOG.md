@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1] - 2021-07-12
+### Added
+- short feature description
+
+## [0.10.0] - 2021-07-09
+### Changed
+- Formatting DLT non-verbose messages now shows the binary data rather then a `fibex missing`
+  literal
+
 ## [0.9.3] - 2021-05-03
 ### Changed
 - Removed pcap-parser library dependency by introducing a feature
