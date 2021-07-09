@@ -298,7 +298,7 @@ impl Message {
         fibex_metadata: Option<&FibexMetadata>,
     ) -> fmt::Result {
         trace!("format_nonverbose_data");
-        let mut is_written = false;
+        let mut fibex_info_added = false;
         if let Some(fibex_metadata) = fibex_metadata {
             let id_text = format!("ID_{}", id);
             let frame_metadata = if let Some(extended_header) = &self.extended_header {
@@ -366,12 +366,12 @@ impl Message {
                         write!(f, "{}{} ", DLT_ARGUMENT_SENTINAL, arg)?;
                     } else {
                         let arguments = self.construct_arguments(&pdu.signal_types, data)?;
-                        warn!("Constructed {} arguments", arguments.len());
+                        trace!("Constructed {} arguments", arguments.len());
                         for arg in arguments {
                             write!(f, "{}{} ", DLT_ARGUMENT_SENTINAL, arg)?;
                         }
                     };
-                    is_written = true;
+                    fibex_info_added = true;
                 }
             } else {
                 self.write_app_id_context_id_and_message_type(f)?;
@@ -379,16 +379,21 @@ impl Message {
         } else {
             self.write_app_id_context_id_and_message_type(f)?;
         }
-        if !is_written {
-            if let Err(_e) = f.write_str(
-                &format!(
-                    "{}[{}]{} {}",
-                    DLT_ARGUMENT_SENTINAL,
-                    id,
-                    DLT_ARGUMENT_SENTINAL,
-                    get_message_type_string(&self.extended_header),
-                )[..],
-            ) {}
+        if !fibex_info_added {
+            let _ = match get_message_type_string(&self.extended_header) {
+                Some(v) => f.write_str(
+                    &format!(
+                        "{}[{}]{} {}",
+                        DLT_ARGUMENT_SENTINAL, id, DLT_ARGUMENT_SENTINAL, v
+                    )[..],
+                ),
+                None => f.write_str(
+                    &format!(
+                        "{}[{}]{} {:02X?}",
+                        DLT_ARGUMENT_SENTINAL, id, DLT_ARGUMENT_SENTINAL, data
+                    )[..],
+                ),
+            };
         }
         Ok(())
     }
@@ -579,27 +584,28 @@ impl fmt::Display for TypeInfo {
         write!(f, "TypeInfo {}", kind)
     }
 }
-fn get_message_type_string<'a>(extended_header: &Option<ExtendedHeader>) -> &'a str {
-    let mut as_string = "- fibex missing -";
+
+fn get_message_type_string(extended_header: &Option<ExtendedHeader>) -> Option<&str> {
     if let Some(ext) = extended_header {
         match &ext.message_type {
             MessageType::Control(ct) => match ct {
-                ControlType::Request => as_string = "control request",
-                ControlType::Response => as_string = "control response",
-                ControlType::Unknown(_) => as_string = "unknown control",
+                ControlType::Request => Some("control request"),
+                ControlType::Response => Some("control response"),
+                ControlType::Unknown(_) => Some("unknown control"),
             },
             MessageType::NetworkTrace(ntt) => match ntt {
-                NetworkTraceType::Ipc => as_string = "Ipc",
-                NetworkTraceType::Can => as_string = "Can",
-                NetworkTraceType::Flexray => as_string = "Flexray",
-                NetworkTraceType::Most => as_string = "Most",
-                NetworkTraceType::Ethernet => as_string = "Ethernet",
-                NetworkTraceType::Someip => as_string = "Someip",
-                NetworkTraceType::Invalid => as_string = "Invalid",
-                _ => as_string = "unknown network trace",
+                NetworkTraceType::Ipc => Some("Ipc"),
+                NetworkTraceType::Can => Some("Can"),
+                NetworkTraceType::Flexray => Some("Flexray"),
+                NetworkTraceType::Most => Some("Most"),
+                NetworkTraceType::Ethernet => Some("Ethernet"),
+                NetworkTraceType::Someip => Some("Someip"),
+                NetworkTraceType::Invalid => Some("Invalid"),
+                _ => Some("unknown network trace"),
             },
-            _ => (),
+            _ => None,
         }
+    } else {
+        None
     }
-    as_string
 }
