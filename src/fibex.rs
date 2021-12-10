@@ -481,6 +481,7 @@ const B_CODING_REF: &[u8] = b"CODING-REF";
 const B_BASE_DATA_TYPE: &[u8] = b"BASE-DATA-TYPE";
 const B_CODED_TYPE: &[u8] = b"CODED-TYPE";
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) enum Event {
     PduStart {

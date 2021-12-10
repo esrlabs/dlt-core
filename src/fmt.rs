@@ -41,10 +41,6 @@ lazy_static::lazy_static! {
         unsafe { str::from_utf8_unchecked(DLT_NEWLINE_SENTINAL_SLICE) };
 }
 
-pub struct FormatOptions {
-    pub tz: Option<Tz>,
-}
-
 impl fmt::Display for MessageType {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
         match self {
@@ -69,14 +65,10 @@ impl fmt::Display for StorageHeader {
 }
 
 impl StorageHeader {
-    pub fn to_string(&self, options: &FormatOptions) -> String {
+    pub fn as_tz_string(&self, tz: &Tz) -> String {
         format!(
             "{}{}{}",
-            if let Some(tz) = options.tz.as_ref() {
-                self.timestamp.tz_string(tz)
-            } else {
-                self.timestamp.utc_string()
-            },
+            self.timestamp.tz_string(tz),
             DLT_COLUMN_SENTINAL,
             self.ecu_id
         )
@@ -169,7 +161,20 @@ impl fmt::Display for Argument {
 
 impl fmt::Display for DltTimeStamp {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
-        write!(f, "{}", self.utc_string())
+        let naive: Option<NaiveDateTime> =
+            NaiveDateTime::from_timestamp_opt(i64::from(self.seconds), self.microseconds * 1000);
+        match naive {
+            Some(n) => {
+                let datetime: DateTime<Utc> = DateTime::from_utc(n, Utc);
+                let system_time: std::time::SystemTime = std::time::SystemTime::from(datetime);
+                write!(f, "{}", humantime::format_rfc3339(system_time))
+            }
+            None => write!(
+                f,
+                "no valid timestamp for {}s/{}us",
+                self.seconds, self.microseconds
+            ),
+        }
     }
 }
 
@@ -211,15 +216,32 @@ impl fmt::Display for LogLevel {
     }
 }
 
+#[derive(Default)]
+pub struct FormatOptions {
+    pub tz: Option<Tz>,
+}
+
 /// A dlt message that can be formatted with optional FIBEX data support
 pub struct FormattableMessage<'a> {
     pub message: Message,
     pub fibex_metadata: Option<&'a FibexMetadata>,
+    pub options: Option<&'a FormatOptions>,
+}
+
+impl<'a> From<Message> for FormattableMessage<'a> {
+    fn from(message: Message) -> Self {
+        FormattableMessage {
+            message,
+            fibex_metadata: None,
+            options: None,
+        }
+    }
 }
 
 impl<'a> fmt::Display for FormattableMessage<'a> {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
-        self.message.fmt_as_text(f, self.fibex_metadata)
+        self.message
+            .fmt_as_text(f, self.fibex_metadata, self.options)
     }
 }
 
@@ -231,9 +253,13 @@ impl DltTimeStamp {
             Some(n) => DateTime::<Utc>::from_utc(n, Utc)
                 .with_timezone(tz)
                 .to_string(),
-            None => String::from("no valid timestamp for {}s/{}us"),
+            None => format!(
+                "no valid timestamp for {}s/{}us",
+                self.seconds, self.microseconds,
+            ),
         }
     }
+
     pub fn utc_string(&self) -> String {
         let naive: Option<NaiveDateTime> =
             NaiveDateTime::from_timestamp_opt(i64::from(self.seconds), self.microseconds * 1000);
@@ -243,7 +269,10 @@ impl DltTimeStamp {
                 let system_time: std::time::SystemTime = std::time::SystemTime::from(datetime);
                 humantime::format_rfc3339(system_time).to_string()
             }
-            None => String::from("no valid timestamp for {}s/{}us"),
+            None => format!(
+                "no valid timestamp for {}s/{}us",
+                self.seconds, self.microseconds,
+            ),
         }
     }
 }
@@ -266,42 +295,14 @@ impl Message {
         &self,
         f: &mut fmt::Formatter,
         fibex_metadata: Option<&FibexMetadata>,
+        options: Option<&FormatOptions>,
     ) -> fmt::Result {
         if let Some(h) = &self.storage_header {
-            write!(f, "{}", h)?;
-        }
-        write!(f, "{}", DLT_COLUMN_SENTINAL,)?;
-        write!(f, "{}", self.header)?;
-        write!(f, "{}", DLT_COLUMN_SENTINAL,)?;
-
-        match &self.payload {
-            PayloadContent::Verbose(arguments) => {
-                self.write_app_id_context_id_and_message_type(f)?;
-                arguments
-                    .iter()
-                    .try_for_each(|arg| write!(f, "{}{}", DLT_ARGUMENT_SENTINAL, arg))
-            }
-            PayloadContent::NonVerbose(id, data) => {
-                self.format_nonverbose_data(*id, data, f, fibex_metadata)
-            }
-            PayloadContent::ControlMsg(ctrl_id, _data) => {
-                self.write_app_id_context_id_and_message_type(f)?;
-                match SERVICE_ID_MAPPING.get(&ctrl_id.value()) {
-                    Some((name, _desc)) => write!(f, "[{}]", name),
-                    None => write!(f, "[Unknown CtrlCommand]"),
-                }
-            }
-        }
-    }
-
-    pub fn custom_fmt_as_text(
-        &self,
-        f: &mut fmt::Formatter,
-        fibex_metadata: Option<&FibexMetadata>,
-        options: &FormatOptions,
-    ) -> fmt::Result {
-        if let Some(h) = &self.storage_header {
-            write!(f, "{}", h.to_string(options))?;
+            let tz = options.map(|o| o.tz);
+            match tz {
+                Some(Some(tz)) => write!(f, "{}", h.as_tz_string(&tz))?,
+                _ => write!(f, "{}", h)?,
+            };
         }
         write!(f, "{}", DLT_COLUMN_SENTINAL,)?;
         write!(f, "{}", self.header)?;
