@@ -45,12 +45,12 @@ mod tests {
 
     #[test]
     fn test_skip_to_next_storage_header_later_in_input() {
-        let input_1: Vec<u8> = concatenate_arrays(&[0xa, 0xb, 0xc], &DLT_PATTERN);
+        let input_1: Vec<u8> = concatenate_arrays(&[0xa, 0xb, 0xc], DLT_PATTERN);
         assert_eq!(
             Some((3, DLT_PATTERN)),
             forward_to_next_storage_header(&input_1)
         );
-        let input_2: Vec<u8> = concatenate_arrays(&[0xa, 0xb, 0xc, 0xd], &DLT_PATTERN);
+        let input_2: Vec<u8> = concatenate_arrays(&[0xa, 0xb, 0xc, 0xd], DLT_PATTERN);
         assert_eq!(
             Some((4, DLT_PATTERN)),
             forward_to_next_storage_header(&input_2)
@@ -59,7 +59,7 @@ mod tests {
     #[test]
     fn test_skip_to_next_storage_header_immediately_in_input() {
         let input_1 = &DLT_PATTERN;
-        let res = forward_to_next_storage_header(&input_1);
+        let res = forward_to_next_storage_header(input_1);
         assert_eq!(Some((0, DLT_PATTERN)), res);
     }
     #[test]
@@ -223,7 +223,7 @@ mod tests {
         ];
         raw1.extend_from_slice(&raw2);
         let result_1_2 = match dlt_message(&raw1, None, true) {
-            Ok((rest1, _msg)) => dlt_message(&rest1, None, true),
+            Ok((rest1, _msg)) => dlt_message(rest1, None, true),
             Err(e) => panic!("Parse should succeed: {}", e),
         };
         let res2: Result<(&[u8], ParsedMessage), DltParseError> = dlt_message(&raw2, None, true);
