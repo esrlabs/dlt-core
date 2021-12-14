@@ -317,10 +317,9 @@ pub(crate) fn read_fibexes(files: Vec<PathBuf>) -> Result<FibexMetadata, Error> 
                     description,
                     signal_types: signal_refs
                         .into_iter()
-                        .map(|type_ref| {
+                        .filter_map(|type_ref| {
                             type_info_for_signal_ref(type_ref, &signals_map, &codings_map)
                         })
-                        .flatten()
                         .collect(),
                 });
             }
