@@ -39,7 +39,6 @@ use nom::{
 use std::convert::TryFrom;
 use thiserror::Error;
 
-const DLT_PATTERN_SIZE: usize = 4;
 /// DLT pattern at the start of a storage header
 pub const DLT_PATTERN: &[u8] = &[0x44, 0x4C, 0x54, 0x01];
 
@@ -129,28 +128,14 @@ impl From<nom::Err<(&[u8], nom::error::ErrorKind)>> for DltParseError {
 /// * `input` - A slice of bytes that contain dlt messages including storage headers
 ///
 pub fn forward_to_next_storage_header(input: &[u8]) -> Option<(u64, &[u8])> {
-    let mut found = false;
-    let mut to_drop = 0usize;
-    for v in input.windows(DLT_PATTERN_SIZE) {
-        if v == DLT_PATTERN {
-            found = true;
-            break;
+    use memchr::memmem;
+    let finder = memmem::Finder::new(DLT_PATTERN);
+    finder.find(input).map(|to_drop| {
+        if to_drop > 0 {
+            trace!("Need to drop {} bytes to get to next message", to_drop);
         }
-        to_drop += 1;
-    }
-
-    if !found {
-        debug!(
-            "forward but no more storage header (input left {})",
-            input.len()
-        );
-        return None;
-    }
-    if to_drop > 0 {
-        trace!("Need to drop {} bytes to get to next message", to_drop);
-    }
-    trace!("forwarded {}", to_drop);
-    Some((to_drop as u64, &input[to_drop..]))
+        (to_drop as u64, &input[to_drop..])
+    })
 }
 
 /// parse the next DLT storage header
@@ -1036,7 +1021,11 @@ pub fn skip_storage_header(input: &[u8]) -> IResult<&[u8], u64, DltParseError> {
 }
 
 /// Skip one dlt message in the input stream in an efficient way
+/// pre: message to be parsed contains a storage header
 pub fn dlt_consume_msg(input: &[u8]) -> IResult<&[u8], Option<u64>, DltParseError> {
+    if input.is_empty() {
+        return Ok((input, None));
+    }
     let (after_storage_header, skipped_bytes) = skip_storage_header(input)?;
     let (_, header) = dlt_standard_header(after_storage_header)?;
     let overall_length_without_storage_header = header.overall_length() as u64;

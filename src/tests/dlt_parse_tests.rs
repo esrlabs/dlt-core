@@ -296,7 +296,9 @@ mod tests {
                 if let Ok((rest, consumed))  = dlt_consume_msg(remaining) {
                     was_message = consumed.is_some();
                     remaining = rest;
-                    msg_cnt += 1;
+                    if was_message {
+                        msg_cnt += 1;
+                    }
                 } else {
                     break;
                 }

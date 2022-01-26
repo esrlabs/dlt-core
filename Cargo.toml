@@ -1,8 +1,8 @@
 [package]
 name = "dlt-core"
-version = "0.11.0"
-authors = ["Oliver Mueller <oliver.mueller@esrlabs.com>"]
-edition = "2018"
+version = "0.12.0"
+authors = ["esrlabs.com"]
+edition = "2021"
 description = """
 Parser and writer for autosar DLT Diagnostic Log and Trace
 """
@@ -19,7 +19,8 @@ derive_more = "0.99.13"
 humantime = "2.1"
 lazy_static = "1.4"
 log = "0.4"
-nom = "7.1.0"
+memchr = "2.4"
+nom = "7.1"
 quick-xml = "0.22"
 rustc-hash = "1.1"
 serde = { version = "1.0", features = ["derive"] }
@@ -33,7 +34,7 @@ pcap = ["pcap-parser"]
 
 [dev-dependencies]
 criterion = { version = "0.3", features = ["html_reports"] }
-dirs = "4.0.0"
+dirs = "4.0"
 env_logger = "0.9.0"
 pretty_assertions = "1.0.0"
 proptest = "1.0"

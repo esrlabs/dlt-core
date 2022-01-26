@@ -1471,6 +1471,7 @@ impl Message {
         self.header.overall_length()
     }
 
+    #[must_use]
     pub fn add_storage_header(mut self, time_stamp: Option<DltTimeStamp>) -> Self {
         let timestamp = match time_stamp {
             Some(ts) => ts,

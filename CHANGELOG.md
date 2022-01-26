@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2022-01-26
+### Changed
+- Performance improvements
+
+## [0.11.0] - 2021-12-14
+### Added
+- Formating timestamp based on timezone
+
 ## [0.10.1] - 2021-07-12
 ### Added
 - short feature description
