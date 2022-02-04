@@ -22,8 +22,6 @@ extern crate log;
 pub mod dlt;
 pub mod fibex;
 pub mod filtering;
-#[cfg(not(tarpaulin_include))]
-pub mod fmt;
 pub mod parse;
 #[cfg(not(tarpaulin_include))]
 pub mod service_id;

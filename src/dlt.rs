@@ -430,7 +430,7 @@ impl AsRef<str> for ControlType {
 }
 
 impl ControlType {
-    pub(crate) fn value(&self) -> u8 {
+    pub fn value(&self) -> u8 {
         match *self {
             ControlType::Request => CTRL_TYPE_REQUEST,
             ControlType::Response => CTRL_TYPE_RESPONSE,
@@ -471,20 +471,6 @@ impl AsRef<str> for MessageType {
             Self::Control(c) => c.as_ref(),
             Self::Unknown(_) => "UNKNOWN MSG TYPE",
         }
-    }
-}
-
-impl MessageType {
-    pub(crate) fn try_new_from_fibex_message_info(message_info: &str) -> Option<MessageType> {
-        Some(MessageType::Log(match message_info {
-            "DLT_LOG_FATAL" => LogLevel::Fatal,
-            "DLT_LOG_ERROR" => LogLevel::Error,
-            "DLT_LOG_WARN" => LogLevel::Warn,
-            "DLT_LOG_INFO" => LogLevel::Info,
-            "DLT_LOG_DEBUG" => LogLevel::Debug,
-            "DLT_LOG_VERBOSE" => LogLevel::Verbose,
-            _ => return None,
-        }))
     }
 }
 
@@ -573,7 +559,8 @@ pub enum FloatWidth {
     Width32 = 32,
     Width64 = 64,
 }
-pub(crate) fn float_width_to_type_length(width: FloatWidth) -> TypeLength {
+
+pub fn float_width_to_type_length(width: FloatWidth) -> TypeLength {
     match width {
         FloatWidth::Width32 => TypeLength::BitLength32,
         FloatWidth::Width64 => TypeLength::BitLength64,
@@ -900,7 +887,7 @@ impl Argument {
         }
     }
 
-    pub(crate) fn to_real_value(&self) -> Option<u64> {
+    pub fn to_real_value(&self) -> Option<u64> {
         match (&self.type_info.kind, &self.fixed_point) {
             (TypeInfoKind::SignedFixedPoint(_), Some(_)) => self.log_v(),
             (TypeInfoKind::UnsignedFixedPoint(_), Some(_)) => self.log_v(),

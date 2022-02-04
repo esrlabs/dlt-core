@@ -55,12 +55,12 @@ pub struct FibexConfig {
 /// The model represented by the FIBEX data
 #[derive(Debug, PartialEq, Clone)]
 pub struct FibexMetadata {
-    pub(crate) frame_map_with_key: HashMap<(ContextId, ApplicationId, FrameId), FrameMetadata>, // TODO: avoid cloning on .get
-    pub(crate) frame_map: HashMap<FrameId, FrameMetadata>,
+    pub frame_map_with_key: HashMap<(ContextId, ApplicationId, FrameId), FrameMetadata>, // TODO: avoid cloning on .get
+    pub frame_map: HashMap<FrameId, FrameMetadata>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub(crate) struct FrameMetadata {
+pub struct FrameMetadata {
     pub short_name: String,
     pub pdus: Vec<PduMetadata>, // TODO keep vector of ids and lookup PduMetadata by id if too expensive
     pub application_id: Option<ApplicationId>,
@@ -70,19 +70,19 @@ pub(crate) struct FrameMetadata {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub(crate) struct PduMetadata {
-    pub(crate) description: Option<String>,
-    pub(crate) signal_types: Vec<TypeInfo>,
+pub struct PduMetadata {
+    pub description: Option<String>,
+    pub signal_types: Vec<TypeInfo>,
 }
 
 #[derive(Hash, PartialEq, Eq, Clone, Debug, Deref, Display)]
-pub(crate) struct FrameId(pub String);
+pub struct FrameId(pub String);
 
 #[derive(Hash, PartialEq, Eq, Clone, Debug, Deref, Display)]
-pub(crate) struct ContextId(pub String);
+pub struct ContextId(pub String);
 
 #[derive(Hash, PartialEq, Eq, Clone, Debug, Deref, Display)]
-pub(crate) struct ApplicationId(pub String);
+pub struct ApplicationId(pub String);
 
 fn type_info_for_signal_ref(
     signal_ref: String,

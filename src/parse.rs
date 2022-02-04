@@ -22,7 +22,7 @@ use crate::{
     },
     filtering,
 };
-use byteorder::{BigEndian, LittleEndian};
+use byteorder::{BigEndian, ByteOrder, LittleEndian};
 use nom::{
     bytes::streaming::{tag, take, take_while_m_n},
     combinator::map,
@@ -75,13 +75,6 @@ pub enum DltParseError {
 
 impl From<std::io::Error> for DltParseError {
     fn from(err: std::io::Error) -> DltParseError {
-        DltParseError::Unrecoverable(format!("{}", err))
-    }
-}
-
-#[cfg(feature = "pcap")]
-impl From<pcap_parser::PcapError> for DltParseError {
-    fn from(err: pcap_parser::PcapError) -> DltParseError {
         DltParseError::Unrecoverable(format!("{}", err))
     }
 }
@@ -668,10 +661,6 @@ pub(crate) fn dlt_argument<T: NomByteOrder>(
             };
             let (rest, value) = dlt_zero_terminated_string(i3, size as usize)?;
             dbg_parsed("StringType", i3, rest, &value);
-            // trace!(
-            //     "was stringtype: \"{}\", size should have been {}",
-            //     value, size
-            // );
             Ok((
                 rest,
                 Argument {
@@ -827,7 +816,6 @@ fn dlt_message_intern<'a>(
     filter_config_opt: Option<&filtering::ProcessedDltFilterConfig>,
     with_storage_header: bool,
 ) -> IResult<&'a [u8], ParsedMessage, DltParseError> {
-    // trace!("starting to parse dlt_message==================");
     let (after_storage_header, storage_header_shifted): (&[u8], Option<(StorageHeader, u64)>) =
         if with_storage_header {
             dlt_storage_header(input)?
@@ -870,10 +858,6 @@ fn dlt_message_intern<'a>(
     } else {
         (after_storage_and_normal_header, None)
     };
-    // trace!(
-    //     "extended header: {:?}",
-    //     serde_json::to_string(&extended_header)
-    // );
     let payload_length = match payload_length_res {
         Ok(length) => length,
         Err(e) => {
@@ -1032,4 +1016,213 @@ pub fn dlt_consume_msg(input: &[u8]) -> IResult<&[u8], Option<u64>, DltParseErro
     let (after_message, _) = take(overall_length_without_storage_header)(after_storage_header)?;
     let consumed = skipped_bytes + overall_length_without_storage_header;
     Ok((after_message, Some(consumed)))
+}
+
+/// if the type-info for the payload arguments is proviced, this
+/// function parses and creates the individual arguments from payload data
+pub fn construct_arguments(
+    endianness: Endianness,
+    pdu_signal_types: &[TypeInfo],
+    data: &[u8],
+) -> Result<Vec<Argument>, DltParseError> {
+    let mut offset = 0;
+    let mut arguments = vec![];
+    for signal_type in pdu_signal_types {
+        let argument = {
+            let (value, fixed_point): (Value, Option<FixedPoint>) = {
+                let mut fixed_point = None;
+                match signal_type.kind {
+                    TypeInfoKind::StringType | TypeInfoKind::Raw => {
+                        if data.len() < offset + 2 {
+                            return Err(DltParseError::ParsingHickup(
+                                "Data not long enough".to_owned(),
+                            ));
+                        }
+                        let length = if endianness == Endianness::Big {
+                            BigEndian::read_u16(&data[offset..offset + 2]) as usize
+                        } else {
+                            LittleEndian::read_u16(&data[offset..offset + 2]) as usize
+                        };
+                        offset += 2;
+                        if data.len() < offset + length {
+                            return Err(DltParseError::ParsingHickup(
+                                "Data not long enough".to_owned(),
+                            ));
+                        }
+                        let v = if signal_type.kind == TypeInfoKind::StringType {
+                            Value::StringVal(
+                                String::from_utf8(data[offset..offset + length].to_vec()).map_err(
+                                    |e| {
+                                        DltParseError::ParsingHickup(format!(
+                                            "Could not build string: {}",
+                                            e
+                                        ))
+                                    },
+                                )?,
+                            )
+                        } else {
+                            Value::Raw(Vec::from(&data[offset..offset + length]))
+                        };
+                        offset += length;
+                        Ok((v, fixed_point))
+                    }
+                    TypeInfoKind::Bool => {
+                        offset += 1;
+                        if data.len() < offset {
+                            return Err(DltParseError::ParsingHickup(
+                                "Data not long enough".to_owned(),
+                            ));
+                        }
+                        Ok((Value::Bool(data[offset - 1]), fixed_point))
+                    }
+                    TypeInfoKind::Float(width) => {
+                        let length = width as usize / 8;
+                        if data.len() < offset + length {
+                            return Err(DltParseError::ParsingHickup(
+                                "Data not long enough".to_owned(),
+                            ));
+                        }
+                        let v = if endianness == Endianness::Big {
+                            dlt_fint::<BigEndian>(width)(&data[offset..offset + length])
+                        } else {
+                            dlt_fint::<LittleEndian>(width)(&data[offset..offset + length])
+                        }
+                        .map_err(|e| {
+                            DltParseError::ParsingHickup(format!("Could not read fint: {}", e))
+                        })?
+                        .1;
+                        offset += length;
+                        Ok((v, fixed_point)) as Result<(Value, Option<FixedPoint>), DltParseError>
+                    }
+                    TypeInfoKind::Signed(length) => {
+                        let byte_length = length as usize / 8;
+                        if data.len() < offset + byte_length {
+                            return Err(DltParseError::ParsingHickup(
+                                "Data not long enough".to_owned(),
+                            ));
+                        }
+                        let value_offset = &data[offset..];
+                        let (_, v) = if endianness == Endianness::Big {
+                            dlt_sint::<BigEndian>(length)(value_offset)
+                        } else {
+                            dlt_sint::<LittleEndian>(length)(value_offset)
+                        }
+                        .map_err(|e| {
+                            DltParseError::ParsingHickup(format!("Could not read sint: {}", e))
+                        })?;
+                        offset += byte_length;
+                        Ok((v, fixed_point))
+                    }
+                    TypeInfoKind::SignedFixedPoint(length) => {
+                        let byte_length = length as usize / 8;
+                        if data.len() < offset + byte_length {
+                            return Err(DltParseError::ParsingHickup(
+                                "Data not long enough".to_owned(),
+                            ));
+                        }
+                        let (value_offset, fp) = if endianness == Endianness::Big {
+                            dlt_fixed_point::<BigEndian>(
+                                &data[offset..offset + byte_length],
+                                length,
+                            )
+                        } else {
+                            dlt_fixed_point::<LittleEndian>(
+                                &data[offset..offset + byte_length],
+                                length,
+                            )
+                        }
+                        .map_err(|e| {
+                            DltParseError::ParsingHickup(format!(
+                                "Could not read fixed point: {}",
+                                e
+                            ))
+                        })?;
+                        fixed_point = Some(fp);
+                        let (_, v) = if endianness == Endianness::Big {
+                            dlt_sint::<BigEndian>(float_width_to_type_length(length))(value_offset)
+                        } else {
+                            dlt_sint::<LittleEndian>(float_width_to_type_length(length))(
+                                value_offset,
+                            )
+                        }
+                        .map_err(|e| {
+                            DltParseError::ParsingHickup(format!("Could not read sint: {}", e))
+                        })?;
+                        offset += byte_length;
+                        Ok((v, fixed_point))
+                    }
+                    TypeInfoKind::Unsigned(length) => {
+                        let byte_length = length as usize / 8;
+                        if data.len() < offset + byte_length {
+                            return Err(DltParseError::ParsingHickup(
+                                "Data not long enough".to_owned(),
+                            ));
+                        }
+                        let value_offset = &data[offset..];
+                        let (_, v) = if endianness == Endianness::Big {
+                            dlt_uint::<BigEndian>(length)(value_offset)
+                        } else {
+                            dlt_uint::<LittleEndian>(length)(value_offset)
+                        }
+                        .map_err(|e| {
+                            DltParseError::ParsingHickup(format!("Could not read uint: {}", e))
+                        })?;
+                        offset += byte_length;
+                        Ok((v, fixed_point))
+                    }
+                    TypeInfoKind::UnsignedFixedPoint(length) => {
+                        let byte_length = length as usize / 8;
+                        if data.len() < offset + byte_length {
+                            return Err(DltParseError::ParsingHickup(
+                                "Data not long enough".to_owned(),
+                            ));
+                        }
+                        let value_offset = {
+                            let (r, fp) = if endianness == Endianness::Big {
+                                dlt_fixed_point::<BigEndian>(
+                                    &data[offset..offset + byte_length],
+                                    length,
+                                )
+                            } else {
+                                dlt_fixed_point::<LittleEndian>(
+                                    &data[offset..offset + byte_length],
+                                    length,
+                                )
+                            }
+                            .map_err(|e| {
+                                DltParseError::ParsingHickup(format!(
+                                    "Could not read fixed point: {}",
+                                    e
+                                ))
+                            })?;
+                            fixed_point = Some(fp);
+                            r
+                        };
+                        let (_, v) = if endianness == Endianness::Big {
+                            dlt_uint::<BigEndian>(float_width_to_type_length(length))(value_offset)
+                        } else {
+                            dlt_uint::<LittleEndian>(float_width_to_type_length(length))(
+                                value_offset,
+                            )
+                        }
+                        .map_err(|e| {
+                            DltParseError::ParsingHickup(format!("Could not read float: {}", e))
+                        })?;
+                        offset += byte_length;
+                        Ok((v, fixed_point))
+                    }
+                }
+            }?;
+
+            Argument {
+                type_info: signal_type.clone(),
+                name: None,
+                unit: None,
+                fixed_point,
+                value,
+            }
+        };
+        arguments.push(argument);
+    }
+    Ok(arguments)
 }

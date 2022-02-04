@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2022-02-10
+### Changed
+- breaking change in API: Display implementation removed since it is not part of the core functionality
+
 ## [0.12.0] - 2022-01-26
 ### Changed
 - Performance improvements

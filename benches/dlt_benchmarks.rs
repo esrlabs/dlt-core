@@ -12,7 +12,7 @@ fn dlt_benchmark(c: &mut Criterion) {
             seconds: 0x4DC9_2C26,
             microseconds: 0x000C_A2D8,
         };
-        b.iter(|| format!("{}", timestamp))
+        b.iter(|| format!("{:?}", timestamp))
     });
     //     c.bench_function("format message", |b| {
     //         let timestamp = DltTimeStamp {
