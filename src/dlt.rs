@@ -321,6 +321,20 @@ pub enum LogLevel {
     Invalid(u8),
 }
 
+impl AsRef<str> for LogLevel {
+    fn as_ref(&self) -> &str {
+        match self {
+            Self::Fatal => "LogLevel FATAL",
+            Self::Error => "LogLevel ERROR",
+            Self::Warn => "LogLevel WARN",
+            Self::Info => "LogLevel INFO",
+            Self::Debug => "LogLevel DEBUG",
+            Self::Verbose => "LogLevel VERBOSE",
+            Self::Invalid(_) => "LogLevel INVALID",
+        }
+    }
+}
+
 /// Represents the kind of a `DLT Trace Message`
 ///
 /// In case the dlt message contains tracing information, the Trace-Type
@@ -338,6 +352,19 @@ pub enum ApplicationTraceType {
         proptest(strategy = "(6..15u8).prop_map(ApplicationTraceType::Invalid)")
     )]
     Invalid(u8),
+}
+
+impl AsRef<str> for ApplicationTraceType {
+    fn as_ref(&self) -> &str {
+        match self {
+            Self::Variable => "VARIABLE",
+            Self::FunctionIn => "FUNCTION_IN",
+            Self::FunctionOut => "FUNCTION_OUT",
+            Self::State => "STATE",
+            Self::Vfb => "VFB",
+            Self::Invalid(_) => "INVALID",
+        }
+    }
 }
 
 /// Represents the kind of a `DLT Network Message`
@@ -361,6 +388,21 @@ pub enum NetworkTraceType {
     UserDefined(u8),
 }
 
+impl AsRef<str> for NetworkTraceType {
+    fn as_ref(&self) -> &str {
+        match self {
+            Self::Ipc => "IPC",
+            Self::Can => "CAN",
+            Self::Flexray => "FLEXRAY",
+            Self::Most => "MOST",
+            Self::Ethernet => "ETHERNET",
+            Self::Someip => "SOMEIP",
+            Self::Invalid => "INVALID",
+            Self::UserDefined(_) => "USER_DEFINED",
+        }
+    }
+}
+
 const CTRL_TYPE_REQUEST: u8 = 0x1;
 const CTRL_TYPE_RESPONSE: u8 = 0x2;
 
@@ -376,6 +418,17 @@ pub enum ControlType {
     #[cfg_attr(test, proptest(strategy = "(3..15u8).prop_map(ControlType::Unknown)"))]
     Unknown(u8),
 }
+
+impl AsRef<str> for ControlType {
+    fn as_ref(&self) -> &str {
+        match self {
+            Self::Request => "MSG_TYPE Ctrl(request)",
+            Self::Response => "MSG_TYPE Ctrl(response)",
+            Self::Unknown(_) => "MSG_TYPE Ctrl(unknown)",
+        }
+    }
+}
+
 impl ControlType {
     pub(crate) fn value(&self) -> u8 {
         match *self {
@@ -406,6 +459,19 @@ pub enum MessageType {
         proptest(strategy = "((0b100u8..0b111u8),(0..0b1111u8)).prop_map(MessageType::Unknown)")
     )]
     Unknown((u8, u8)),
+}
+
+impl AsRef<str> for MessageType {
+    #[inline]
+    fn as_ref(&self) -> &str {
+        match self {
+            Self::Log(level) => level.as_ref(),
+            Self::ApplicationTrace(a) => a.as_ref(),
+            Self::NetworkTrace(n) => n.as_ref(),
+            Self::Control(c) => c.as_ref(),
+            Self::Unknown(_) => "UNKNOWN MSG TYPE",
+        }
+    }
 }
 
 impl MessageType {
