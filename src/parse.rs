@@ -144,15 +144,13 @@ pub fn forward_to_next_storage_header(input: &[u8]) -> Option<(u64, &[u8])> {
 pub(crate) fn dlt_storage_header(
     input: &[u8],
 ) -> IResult<&[u8], Option<(StorageHeader, u64)>, DltParseError> {
+    if input.len() < STORAGE_HEADER_LENGTH as usize {
+        return Err(nom::Err::Incomplete(nom::Needed::Unknown));
+    }
     match forward_to_next_storage_header(input) {
         Some((consumed, rest)) => {
             let (input, (_, _, seconds, microseconds)) =
-                tuple((tag("DLT"), tag(&[0x01]), le_u32, le_u32))(rest).map_err(|ne| {
-                    Error(nom_to_dlt_parse_error(
-                        ne,
-                        "Problems trying to parse DLT pattern",
-                    ))
-                })?;
+                tuple((tag("DLT"), tag(&[0x01]), le_u32, le_u32))(rest)?;
 
             let (after_string, ecu_id) = dlt_zero_terminated_string(input, 4)?;
             Ok((
@@ -245,13 +243,7 @@ pub(crate) fn dlt_standard_header(input: &[u8]) -> IResult<&[u8], StandardHeader
         maybe_parse_ecu_id(has_ecu_id),
         maybe_parse_u32(has_session_id),
         maybe_parse_u32(has_timestamp),
-    ))(input)
-    .map_err(|ne: nom::Err<DltParseError>| {
-        Error(nom_to_dlt_parse_error(
-            ne,
-            "Problems parsing DLT standard header",
-        ))
-    })?;
+    ))(input)?;
 
     let has_extended_header = (header_type_byte & WITH_EXTENDED_HEADER_FLAG) != 0;
     let all_headers_length = calculate_all_headers_length(header_type_byte);
@@ -850,7 +842,7 @@ fn dlt_message_intern<'a>(
         &header,
     );
 
-    let payload_length_res = validated_payload_length(&header, input.len());
+    let payload_length_res = validated_payload_length(&header, after_storage_header.len());
 
     let mut verbose: bool = false;
     let mut is_controll_msg = false;
@@ -876,6 +868,11 @@ fn dlt_message_intern<'a>(
     // );
     let payload_length = match payload_length_res {
         Ok(length) => length,
+        Err(DltParseError::IncompleteParse { needed }) => {
+            return Err(nom::Err::Incomplete(
+                needed.map_or(nom::Needed::Unknown, nom::Needed::Size),
+            ))
+        }
         Err(e) => {
             warn!("No validated payload length: {}", e);
             return Ok((after_storage_and_normal_header, ParsedMessage::Invalid));
@@ -985,13 +982,13 @@ pub(crate) fn validated_payload_length(
         ));
     }
 
-    let payload_length = message_length - headers_length;
-    if payload_length as usize > remaining_bytes {
-        return Err(DltParseError::ParsingHickup (
-            "Payload length seems to be longer then the remaining bytes, message-length is malformed".to_string(),
-        ));
+    if message_length as usize > remaining_bytes {
+        return Err(DltParseError::IncompleteParse {
+            needed: std::num::NonZeroUsize::new(message_length as usize - remaining_bytes),
+        });
     }
-    Ok(message_length - headers_length)
+    let payload_length = message_length - headers_length;
+    Ok(payload_length)
 }
 
 pub(crate) fn skip_till_after_next_storage_header(

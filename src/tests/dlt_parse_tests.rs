@@ -207,7 +207,7 @@ mod tests {
             /* WTMS: 1  timestamp     ^      */
             /* version nummber 2   ^^^       */
             /* message counter */ 0x44,
-            /* length = 21327 */ 0x53, 0x4F,
+            /* length = 23 */ 0x00, 0x17,
             /* timestamp (ecu/session id missing) 139698662.4 = ~39h */ 0x53, 0x44, 0x53, 0x00,
             /* extended header */ 0x02, 0x00, 0x00, 0x1D, 0x00, 0x5B, 0x50, 0x6F, 0x6C, 0x6C,
             // message-info MSIN = 0x02 = 0b0000 0010
@@ -219,7 +219,7 @@ mod tests {
             // context id = 506F6C6C = "Poll"
             // ========================================
             // payload
-            0x65, 0x72, 0x3A, 0x3A, 0x70, 0x6F, 0x6C, 0x6C, 0x5D, 0x20, 0x72,
+            0x10, 0x00, 0x00, 0x00, 0x6F,
         ];
         raw1.extend_from_slice(&raw2);
         let result_1_2 = match dlt_message(&raw1, None, true) {
@@ -231,6 +231,16 @@ mod tests {
         assert_eq!(result_1_2, res2);
         let res3: Result<(&[u8], ParsedMessage), DltParseError> = dlt_message(&raw3, None, true);
         assert!(res3.is_ok());
+
+        for end in 1..raw3.len() - 1 {
+            let res3_incomplete = dlt_message(&raw3[..end], None, true);
+
+            assert!(
+                matches!(res3_incomplete, Err(DltParseError::IncompleteParse { .. })),
+                "Ending before {} did not yield Incomplete",
+                end
+            );
+        }
     }
 
     static VALID_ECU_ID_FORMAT: &str = "[0-9a-zA-Z]{4}";
