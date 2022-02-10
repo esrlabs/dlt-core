@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.1] - 2022-02-10
+### Fixed
+- fixed payload length validation (thanks to @eifert)
+
+### Added
+- example of how to parse huge file
+- some benchmark results
+
 ## [0.13.0] - 2022-02-10
 ### Changed
 - breaking change in API: Display implementation removed since it is not part of the core functionality
