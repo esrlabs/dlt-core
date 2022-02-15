@@ -11,48 +11,46 @@
 // from E.S.R.Labs.
 
 //! # official supported DLT service ids
-use std::collections::HashMap;
 
-lazy_static::lazy_static! {
-    /// Contains all the official service ids with it's u8 representation
-    #[rustfmt::skip]
-    pub static ref SERVICE_ID_MAPPING: HashMap<u8, (&'static str, &'static str)> = {
-        let mut m = HashMap::new();
-        m.insert(0x01, ("set_log_level", "Set the Log Level"));
-        m.insert(0x02, ("set_trace_status", "Enable/Disable Trace Messages"));
-        m.insert(0x03, ("get_log_info", "Returns the LogLevel for registered applications"));
-        m.insert(0x04, ("get_default_log_level", "Returns the LogLevel for wildcards"));
-        m.insert(0x05, ("store_configuration", "Stores the current configuration non volatile"));
-        m.insert(0x06, ("restore_to_factory_default", "Sets the configuration back to default"));
-        m.insert(0x07, ("set_com_interface_status", "SetComInterfaceStatus -- deprecated"));
-        m.insert(0x08, ("set_com_interface_max_bandwidth", "SetComInterfaceMaxBandwidth -- deprecated"));
-        m.insert(0x09, ("set_verbose_mode", "SetVerboseMode -- deprecated"));
-        m.insert(0x10, ("set_use_extended_header", "SetUseExtendedHeader -- deprecated"));
-        m.insert(0x0A, ("set_message_filtering", "Enable/Disable message filtering"));
-        m.insert(0x0B, ("set_timing_packets", "SetTimingPackets -- deprecated"));
-        m.insert(0x0C, ("get_local_time", "GetLocalTime -- deprecated"));
-        m.insert(0x0D, ("set_use_ecuid", "SetUseECUID -- deprecated"));
-        m.insert(0x0E, ("set_use_session_id", "SetUseSessionID -- deprecated"));
-        m.insert(0x0F, ("set_use_timestamp", "SetUseTimestamp -- deprecated"));
-        m.insert(0x11, ("set_default_log_level", "Sets the LogLevel for wildcards"));
-        m.insert(0x12, ("set_default_trace_status", "Enable/Disable TraceMessages for wildcards"));
-        m.insert(0x13, ("get_software_version", "Get the ECU software version"));
-        m.insert(0x14, ("message_buffer_overflow", "MessageBufferOverflow -- deprecated"));
-        m.insert(0x15, ("get_default_trace_status", "Get the current TraceLevel for wildcards"));
-        m.insert(0x16, ("get_com_interfacel_status", "GetComInterfacelStatus -- deprecated"));
-        m.insert(0x17, ("get_log_channel_names", "Returns the LogChannel’s name"));
-        m.insert(0x18, ("get_com_interface_max_bandwidth", "GetComInterfaceMaxBandwidth -- deprecated"));
-        m.insert(0x19, ("get_verbose_mode_status", "GetVerboseModeStatus -- deprecated"));
-        m.insert(0x1A, ("get_message_filtering_status", "GetMessageFilteringStatus -- deprecated"));
-        m.insert(0x1B, ("get_use_ecuid", "GetUseECUID -- deprecated"));
-        m.insert(0x1C, ("get_use_session_id", "GetUseSessionID -- deprecated"));
-        m.insert(0x1D, ("get_use_timestamp", "GetUseTimestamp -- deprecated"));
-        m.insert(0x1E, ("get_use_extended_header", "GetUseExtendedHeader -- deprecated"));
-        m.insert(0x1F, ("get_trace_status", "Returns the current TraceStatus"));
-        m.insert(0x20, ("set_log_channel_assignment", "Adds/ Removes the given LogChannel as output path"));
-        m.insert(0x21, ("set_log_channel_threshold", "Sets the filter threshold for the given LogChannel"));
-        m.insert(0x22, ("get_log_channel_threshold", "Returns the current LogLevel for a given LogChannel"));
-        m.insert(0x23, ("buffer_overflow_notification", "Report that a buffer overflow occurred"));
-        m
-    };
+/// Contains all the official service ids with it's u8 representation
+/// Maps from the u8 representation to a tuple (service-id-string, explanation)
+#[rustfmt::skip]
+pub fn service_id_lookup(service_id: u8) -> Option<(&'static str, &'static str)> {
+    match service_id {
+        0x01 => Some(("set_log_level", "Set the Log Level")),
+        0x02 => Some(("set_trace_status", "Enable/Disable Trace Messages")),
+        0x03 => Some(("get_log_info", "Returns the LogLevel for registered applications")),
+        0x04 => Some(("get_default_log_level", "Returns the LogLevel for wildcards")),
+        0x05 => Some(("store_configuration", "Stores the current configuration non volatile")),
+        0x06 => Some(("restore_to_factory_default", "Sets the configuration back to default")),
+        0x07 => Some(("set_com_interface_status", "SetComInterfaceStatus -- deprecated")),
+        0x08 => Some(("set_com_interface_max_bandwidth", "SetComInterfaceMaxBandwidth -- deprecated")),
+        0x09 => Some(("set_verbose_mode", "SetVerboseMode -- deprecated")),0x10 => Some(( "set_use_extended_header", "SetUseExtendedHeader -- deprecated")),
+        0x0A => Some(("set_message_filtering", "Enable/Disable message filtering")),
+        0x0B => Some(("set_timing_packets", "SetTimingPackets -- deprecated")),
+        0x0C => Some(("get_local_time", "GetLocalTime -- deprecated")),
+        0x0D => Some(("set_use_ecuid", "SetUseECUID -- deprecated")),
+        0x0E => Some(("set_use_session_id", "SetUseSessionID -- deprecated")),
+        0x0F => Some(("set_use_timestamp", "SetUseTimestamp -- deprecated")),
+        0x11 => Some(("set_default_log_level", "Sets the LogLevel for wildcards")),
+        0x12 => Some(("set_default_trace_status", "Enable/Disable TraceMessages for wildcards")),
+        0x13 => Some(("get_software_version", "Get the ECU software version")),
+        0x14 => Some(("message_buffer_overflow", "MessageBufferOverflow -- deprecated")),
+        0x15 => Some(("get_default_trace_status", "Get the current TraceLevel for wildcards")),
+        0x16 => Some(("get_com_interfacel_status", "GetComInterfacelStatus -- deprecated")),
+        0x17 => Some(("get_log_channel_names", "Returns the LogChannel’s name")),
+        0x18 => Some(("get_com_interface_max_bandwidth", "GetComInterfaceMaxBandwidth -- deprecated")),
+        0x19 => Some(("get_verbose_mode_status", "GetVerboseModeStatus -- deprecated")),
+        0x1A => Some(("get_message_filtering_status", "GetMessageFilteringStatus -- deprecated")),
+        0x1B => Some(("get_use_ecuid", "GetUseECUID -- deprecated")),
+        0x1C => Some(("get_use_session_id", "GetUseSessionID -- deprecated")),
+        0x1D => Some(("get_use_timestamp", "GetUseTimestamp -- deprecated")),
+        0x1E => Some(("get_use_extended_header", "GetUseExtendedHeader -- deprecated")),
+        0x1F => Some(("get_trace_status", "Returns the current TraceStatus")),
+        0x20 => Some(("set_log_channel_assignment", "Adds/ Removes the given LogChannel as output path")),
+        0x21 => Some(("set_log_channel_threshold", "Sets the filter threshold for the given LogChannel")),
+        0x22 => Some(("get_log_channel_threshold", "Returns the current LogLevel for a given LogChannel")),
+        0x23 => Some(("buffer_overflow_notification", "Report that a buffer overflow occurred")),
+        _ => None,
+    }
 }

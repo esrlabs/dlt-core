@@ -48,7 +48,9 @@ pub struct DltFilterConfig {
     pub context_id_count: i64,
 }
 
-/// More
+/// A processed version of the filter configuration that can be used to parse dlt.
+/// When a `DltFilterConfig` is received (e.g. as serialized json), this can easily
+/// be converted into this processed version using `filter_config.into()`
 #[derive(Clone, Debug)]
 pub struct ProcessedDltFilterConfig {
     pub min_log_level: Option<dlt::LogLevel>,
@@ -59,20 +61,16 @@ pub struct ProcessedDltFilterConfig {
     pub context_id_count: i64,
 }
 
-impl ProcessedDltFilterConfig {
-    pub fn is_anything_deselected() -> bool {
-        false
-    }
-}
-
-pub fn process_filter_config(cfg: DltFilterConfig) -> ProcessedDltFilterConfig {
-    ProcessedDltFilterConfig {
-        min_log_level: cfg.min_log_level.and_then(dlt::u8_to_log_level),
-        app_ids: cfg.app_ids.map(HashSet::from_iter),
-        ecu_ids: cfg.ecu_ids.map(HashSet::from_iter),
-        context_ids: cfg.context_ids.map(HashSet::from_iter),
-        app_id_count: cfg.app_id_count,
-        context_id_count: cfg.context_id_count,
+impl From<DltFilterConfig> for ProcessedDltFilterConfig {
+    fn from(cfg: DltFilterConfig) -> Self {
+        ProcessedDltFilterConfig {
+            min_log_level: cfg.min_log_level.and_then(dlt::u8_to_log_level),
+            app_ids: cfg.app_ids.map(HashSet::from_iter),
+            ecu_ids: cfg.ecu_ids.map(HashSet::from_iter),
+            context_ids: cfg.context_ids.map(HashSet::from_iter),
+            app_id_count: cfg.app_id_count,
+            context_id_count: cfg.context_id_count,
+        }
     }
 }
 

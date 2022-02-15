@@ -560,7 +560,7 @@ pub enum FloatWidth {
     Width64 = 64,
 }
 
-pub fn float_width_to_type_length(width: FloatWidth) -> TypeLength {
+pub(crate) fn float_width_to_type_length(width: FloatWidth) -> TypeLength {
     match width {
         FloatWidth::Width32 => TypeLength::BitLength32,
         FloatWidth::Width64 => TypeLength::BitLength64,

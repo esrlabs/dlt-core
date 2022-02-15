@@ -14,8 +14,7 @@
 //!
 //! `fibex` contains support for non-verbose message information
 //! that is stored in FIBEX files (Field Bus Exchange Format)
-use crate::dlt::{FloatWidth, StringCoding, TypeInfo, TypeInfoKind, TypeLength};
-use derive_more::{Deref, Display};
+use crate::dlt::{ExtendedHeader, FloatWidth, StringCoding, TypeInfo, TypeInfoKind, TypeLength};
 use quick_xml::{
     events::{attributes::Attributes, BytesStart, Event as XmlEvent},
     Reader as XmlReader,
@@ -24,6 +23,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{hash_map::Entry, HashMap},
     fs::File,
+    hash::Hash,
     io::{BufRead, BufReader},
     mem,
     path::{Path, PathBuf},
@@ -52,10 +52,17 @@ pub struct FibexConfig {
     pub fibex_file_paths: Vec<String>,
 }
 
+#[derive(Debug, PartialEq, Hash, Clone, Eq)]
+pub struct FrameMetadataIdentification {
+    pub context_id: String,
+    pub app_id: String,
+    pub frame_id: String,
+}
+
 /// The model represented by the FIBEX data
 #[derive(Debug, PartialEq, Clone)]
 pub struct FibexMetadata {
-    pub frame_map_with_key: HashMap<(ContextId, ApplicationId, FrameId), FrameMetadata>, // TODO: avoid cloning on .get
+    pub frame_map_with_key: HashMap<FrameMetadataIdentification, FrameMetadata>, // TODO: avoid cloning on .get
     pub frame_map: HashMap<FrameId, FrameMetadata>,
 }
 
@@ -75,14 +82,9 @@ pub struct PduMetadata {
     pub signal_types: Vec<TypeInfo>,
 }
 
-#[derive(Hash, PartialEq, Eq, Clone, Debug, Deref, Display)]
-pub struct FrameId(pub String);
-
-#[derive(Hash, PartialEq, Eq, Clone, Debug, Deref, Display)]
-pub struct ContextId(pub String);
-
-#[derive(Hash, PartialEq, Eq, Clone, Debug, Deref, Display)]
-pub struct ApplicationId(pub String);
+pub type FrameId = String;
+pub type ContextId = String;
+pub type ApplicationId = String;
 
 fn type_info_for_signal_ref(
     signal_ref: String,
@@ -278,8 +280,9 @@ pub fn gather_fibex_data(fibex: FibexConfig) -> Option<FibexMetadata> {
 
 pub(crate) fn read_fibexes(files: Vec<PathBuf>) -> Result<FibexMetadata, Error> {
     let mut frames = vec![];
-    let mut frame_map_with_key = HashMap::new();
-    let mut frame_map = HashMap::new();
+    let mut frame_map_with_key: HashMap<FrameMetadataIdentification, FrameMetadata> =
+        HashMap::new();
+    let mut frame_map: HashMap<FrameId, FrameMetadata> = HashMap::new();
     let mut pdu_by_id = HashMap::new();
     let mut signals_map = HashMap::new();
     let mut codings_map = HashMap::new();
@@ -293,7 +296,7 @@ pub(crate) fn read_fibexes(files: Vec<PathBuf>) -> Result<FibexMetadata, Error> 
                     pdus.push((id, read_pdu(&mut reader)?));
                 }
                 Event::FrameStart { id } => {
-                    frames.push((FrameId(id), read_frame(&mut reader)?));
+                    frames.push((id, read_frame(&mut reader)?));
                 }
                 Event::Eof => break,
                 Event::Signal { id, coding_ref } => {
@@ -310,8 +313,8 @@ pub(crate) fn read_fibexes(files: Vec<PathBuf>) -> Result<FibexMetadata, Error> 
         }
     }
     for (id, (description, signal_refs)) in pdus {
-        match pdu_by_id.entry(id.clone()) {
-            Entry::Occupied(_) => warn!("duplicate PDU ID {} found in fibexes", id),
+        match pdu_by_id.entry(id) {
+            Entry::Occupied(e) => warn!("duplicate PDU ID {} found in fibexes", e.key()),
             Entry::Vacant(v) => {
                 v.insert(PduMetadata {
                     description,
@@ -354,22 +357,29 @@ pub(crate) fn read_fibexes(files: Vec<PathBuf>) -> Result<FibexMetadata, Error> 
             message_info,
         };
         if let (Some(context_id), Some(application_id)) =
-            (frame.context_id.clone(), frame.application_id.clone())
+            (frame.context_id.as_ref(), frame.application_id.as_ref())
         {
-            let key = (context_id, application_id, id.clone());
+            let key = FrameMetadataIdentification {
+                context_id: context_id.clone(),
+                app_id: application_id.clone(),
+                frame_id: id.clone(),
+            };
 
-            match frame_map_with_key.entry(key.clone()) {
-                Entry::Occupied(_) => warn!(
-                    "duplicate Frame context_id={} application_id={} id={}",
-                    key.0, key.1, key.2
-                ),
+            match frame_map_with_key.entry(key) {
+                Entry::Occupied(e) => {
+                    let key = e.key();
+                    warn!(
+                        "duplicate Frame context_id={} application_id={} id={}",
+                        key.context_id, key.app_id, key.frame_id
+                    )
+                }
                 Entry::Vacant(entry) => {
                     entry.insert(frame.clone());
                 }
             }
         } // else error?
-        match frame_map.entry(id.clone()) {
-            Entry::Occupied(_) => warn!("duplicate Frame id={}", id),
+        match frame_map.entry(id) {
+            Entry::Occupied(e) => warn!("duplicate Frame id={}", e.key()),
             Entry::Vacant(entry) => {
                 entry.insert(frame);
             }
@@ -433,8 +443,8 @@ fn read_frame(reader: &mut Reader<BufReader<File>>) -> Result<FrameReadData, Err
                 message_info,
                 ..
             } => {
-                frame_context_id = context_id.map(ContextId);
-                frame_application_id = application_id.map(ApplicationId);
+                frame_context_id = context_id;
+                frame_application_id = application_id;
                 frame_message_type = message_type;
                 frame_message_info = message_info;
             }
@@ -539,7 +549,7 @@ impl<B: BufRead> XmlReaderWithContext<B> {
         Ok(self.xml_reader.read_text(tag, buf)?)
     }
     pub fn line_and_column(&self) -> Result<(usize, usize), Error> {
-        let s = std::fs::read_to_string(self.file_path.clone())?;
+        let s = std::fs::read_to_string(&self.file_path)?;
         let mut line = 1;
         let mut column = 0;
         for c in s.chars().take(self.buffer_position()) {
@@ -931,4 +941,25 @@ fn missing_attr_err(attr: &[u8], tag: &[u8], line_column: Result<(usize, usize),
         String::from_utf8_lossy(tag),
         line_column.unwrap_or((0, 0))
     ))
+}
+
+/// lookup `FrameMetadata` in the fibex model using the information from the
+/// extended header. If no extended header is present, try with just the frame-id.
+pub fn extract_metadata<'a>(
+    fibex_metadata: &'a FibexMetadata,
+    id: u32,
+    extended_header: Option<&ExtendedHeader>,
+) -> Option<&'a FrameMetadata> {
+    let id_text = format!("ID_{}", id);
+    match extended_header {
+        Some(extended_header) => {
+            let frame_identifier = FrameMetadataIdentification {
+                context_id: extended_header.context_id.clone(),
+                app_id: extended_header.application_id.clone(),
+                frame_id: id_text,
+            };
+            fibex_metadata.frame_map_with_key.get(&frame_identifier)
+        }
+        None => fibex_metadata.frame_map.get(&id_text),
+    }
 }
