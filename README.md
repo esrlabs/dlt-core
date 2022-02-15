@@ -66,21 +66,15 @@ The parser is quite fast. Parsing a 4.8 GByte DLT file that contains over 3.5 mi
 This example can be built with `cargo build --example file_parser --release`
 
 ```rust
-use buf_redux::{policy::MinBuffered, BufReader};
-use dlt_core::parse::{dlt_message, DltParseError};
-use std::{env, fs, fs::File, io::BufRead, path::PathBuf, time::Instant};
-
-pub(crate) const DLT_READER_CAPACITY: usize = 10 * 1024 * 1024;
-pub(crate) const DLT_MIN_BUFFER_SPACE: usize = 10 * 1024;
-
+...
 fn main() {
     // collect input file details
     let dlt_file_path = PathBuf::from(&env::args().nth(1).expect("No filename given"));
     let dlt_file = File::open(&dlt_file_path).expect("could not open file");
     let source_file_size = fs::metadata(&dlt_file_path).expect("file size error").len();
     // create a reader that maintains a minimum amount of bytes in it's buffer
-    let mut reader = BufReader::with_capacity(DLT_READER_CAPACITY, dlt_file)
-        .set_policy(MinBuffered(DLT_MIN_BUFFER_SPACE));
+    let mut reader = BufReader::with_capacity(BIN_READER_CAPACITY, dlt_file)
+        .set_policy(MinBuffered(BIN_MIN_BUFFER_SPACE));
     // now parse all file content
     let mut parsed = 0usize;
     let start = Instant::now();
@@ -132,5 +126,7 @@ fn main() {
 }
 ```
 
+```
 empty content after 33554430 parsed messages
 parsing 33554430 messages took 37.015s! (133.773 MB/s)
+```
