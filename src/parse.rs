@@ -909,29 +909,29 @@ fn filtered_out(
 ) -> bool {
     if let Some(filter_config) = filter_config_opt {
         if let Some(h) = &extended_header {
-            if let Some(min_filter_level) = filter_config.min_log_level {
-                if h.skip_with_level(min_filter_level) {
-                    // trace!("no need to parse further, skip payload (skipped level)");
-                    return true;
-                }
-            }
             if let Some(only_these_components) = &filter_config.app_ids {
-                if !only_these_components.contains(&h.application_id) {
-                    // trace!("no need to parse further, skip payload (skipped app id)");
-                    return true;
+                if let Some(filter_level) = only_these_components.get(&h.application_id) {
+                    if h.skip_with_level(*filter_level) {
+                        // trace!("no need to parse further, skip payload (skipped level)");
+                        return true;
+                    }
                 }
             }
             if let Some(only_these_context_ids) = &filter_config.context_ids {
-                if !only_these_context_ids.contains(&h.context_id) {
-                    // trace!("no need to parse further, skip payload (skipped context id)");
-                    return true;
+                if let Some(filter_level) = only_these_context_ids.get(&h.context_id) {
+                    if h.skip_with_level(*filter_level) {
+                        // trace!("no need to parse further, skip payload (skipped level)");
+                        return true;
+                    }
                 }
             }
             if let Some(only_these_ecu_ids) = &filter_config.ecu_ids {
                 if let Some(ecu_id) = ecu_id {
-                    if !only_these_ecu_ids.contains(ecu_id) {
-                        // trace!("no need to parse further, skip payload (skipped ecu id)");
-                        return true;
+                    if let Some(filter_level) = only_these_ecu_ids.get(ecu_id) {
+                        if h.skip_with_level(*filter_level) {
+                            // trace!("no need to parse further, skip payload (skipped level)");
+                            return true;
+                        }
                     }
                 }
             }
@@ -1222,4 +1222,156 @@ pub fn construct_arguments(
         arguments.push(argument);
     }
     Ok(arguments)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::dlt::{ExtendedHeader, LogLevel, MessageType};
+    use crate::filtering::*;
+    use crate::parse::filtered_out;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_not_filtered_out() {
+        assert!(!filtered_out(None, None, None));
+
+        let ecu_id = Some(String::from("E1"));
+        let header = Some(ExtendedHeader {
+            verbose: false,
+            argument_count: 0,
+            message_type: MessageType::Log(LogLevel::Verbose),
+            application_id: String::from("A1"),
+            context_id: String::from("C1"),
+        });
+
+        assert!(!filtered_out(header.as_ref(), None, ecu_id.as_ref()));
+
+        let filter_config = Some(ProcessedDltFilterConfig {
+            app_ids: None,
+            ecu_ids: None,
+            context_ids: None,
+            app_id_count: 0,
+            context_id_count: 0,
+        });
+
+        assert!(!filtered_out(
+            header.as_ref(),
+            filter_config.as_ref(),
+            ecu_id.as_ref()
+        ));
+
+        let filter_config = Some(ProcessedDltFilterConfig {
+            app_ids: Some(HashMap::from_iter(vec![(
+                String::from("A1"),
+                LogLevel::Verbose,
+            )])),
+            ecu_ids: None,
+            context_ids: None,
+            app_id_count: 0,
+            context_id_count: 0,
+        });
+
+        assert!(!filtered_out(
+            header.as_ref(),
+            filter_config.as_ref(),
+            ecu_id.as_ref()
+        ));
+
+        let filter_config = Some(ProcessedDltFilterConfig {
+            app_ids: None,
+            ecu_ids: Some(HashMap::from_iter(vec![(
+                String::from("E1"),
+                LogLevel::Verbose,
+            )])),
+            context_ids: None,
+            app_id_count: 0,
+            context_id_count: 0,
+        });
+
+        assert!(!filtered_out(
+            header.as_ref(),
+            filter_config.as_ref(),
+            ecu_id.as_ref()
+        ));
+
+        let filter_config = Some(ProcessedDltFilterConfig {
+            app_ids: None,
+            ecu_ids: None,
+            context_ids: Some(HashMap::from_iter(vec![(
+                String::from("C1"),
+                LogLevel::Verbose,
+            )])),
+            app_id_count: 0,
+            context_id_count: 1,
+        });
+
+        assert!(!filtered_out(
+            header.as_ref(),
+            filter_config.as_ref(),
+            ecu_id.as_ref()
+        ));
+    }
+
+    #[test]
+    fn test_filtered_out() {
+        let ecu_id = Some(String::from("E1"));
+        let header = Some(ExtendedHeader {
+            verbose: false,
+            argument_count: 0,
+            message_type: MessageType::Log(LogLevel::Verbose),
+            application_id: String::from("A1"),
+            context_id: String::from("C1"),
+        });
+
+        let filter_config = Some(ProcessedDltFilterConfig {
+            app_ids: Some(HashMap::from_iter(vec![(
+                String::from("A1"),
+                LogLevel::Debug,
+            )])),
+            ecu_ids: None,
+            context_ids: None,
+            app_id_count: 0,
+            context_id_count: 0,
+        });
+
+        assert!(filtered_out(
+            header.as_ref(),
+            filter_config.as_ref(),
+            ecu_id.as_ref()
+        ));
+
+        let filter_config = Some(ProcessedDltFilterConfig {
+            app_ids: None,
+            ecu_ids: Some(HashMap::from_iter(vec![(
+                String::from("E1"),
+                LogLevel::Debug,
+            )])),
+            context_ids: None,
+            app_id_count: 0,
+            context_id_count: 0,
+        });
+
+        assert!(filtered_out(
+            header.as_ref(),
+            filter_config.as_ref(),
+            ecu_id.as_ref()
+        ));
+
+        let filter_config = Some(ProcessedDltFilterConfig {
+            app_ids: None,
+            ecu_ids: None,
+            context_ids: Some(HashMap::from_iter(vec![(
+                String::from("C1"),
+                LogLevel::Debug,
+            )])),
+            app_id_count: 0,
+            context_id_count: 1,
+        });
+
+        assert!(filtered_out(
+            header.as_ref(),
+            filter_config.as_ref(),
+            ecu_id.as_ref()
+        ));
+    }
 }
