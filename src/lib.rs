@@ -19,6 +19,7 @@
 #[macro_use]
 extern crate log;
 
+pub mod dlf;
 pub mod dlt;
 pub mod fibex;
 pub mod filtering;
