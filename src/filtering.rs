@@ -74,6 +74,22 @@ impl From<DltFilterConfig> for ProcessedDltFilterConfig {
     }
 }
 
+impl From<&DltFilterConfig> for ProcessedDltFilterConfig {
+    fn from(cfg: &DltFilterConfig) -> Self {
+        ProcessedDltFilterConfig {
+            min_log_level: cfg.min_log_level.and_then(dlt::u8_to_log_level),
+            app_ids: cfg.app_ids.as_ref().map(|s| HashSet::from_iter(s.clone())),
+            ecu_ids: cfg.ecu_ids.as_ref().map(|s| HashSet::from_iter(s.clone())),
+            context_ids: cfg
+                .context_ids
+                .as_ref()
+                .map(|s| HashSet::from_iter(s.clone())),
+            app_id_count: cfg.app_id_count,
+            context_id_count: cfg.context_id_count,
+        }
+    }
+}
+
 /// Read filter config from a json file
 pub fn read_filter_options(f: &mut fs::File) -> Option<DltFilterConfig> {
     let mut contents = String::new();
