@@ -91,7 +91,7 @@ pub fn dlt_statistic_row_info(
 }
 
 /// Shows how many messages per log level where found
-#[derive(Serialize, Debug, Default)]
+#[derive(Serialize, Debug, Default, Clone)]
 pub struct LevelDistribution {
     pub non_log: usize,
     pub log_fatal: usize,
@@ -141,6 +141,17 @@ impl LevelDistribution {
             },
         }
     }
+
+    pub fn merge(&mut self, outside: &LevelDistribution) {
+        self.non_log += outside.non_log;
+        self.log_fatal += outside.log_fatal;
+        self.log_error += outside.log_error;
+        self.log_warning += outside.log_warning;
+        self.log_info += outside.log_info;
+        self.log_debug += outside.log_debug;
+        self.log_verbose += outside.log_verbose;
+        self.log_invalid += outside.log_invalid;
+    }
 }
 
 type IdMap = FxHashMap<String, LevelDistribution>;
@@ -153,6 +164,48 @@ pub struct StatisticInfo {
     pub context_ids: Vec<(String, LevelDistribution)>,
     pub ecu_ids: Vec<(String, LevelDistribution)>,
     pub contained_non_verbose: bool,
+}
+
+impl StatisticInfo {
+    pub fn new() -> Self {
+        Self {
+            app_ids: vec![],
+            context_ids: vec![],
+            ecu_ids: vec![],
+            contained_non_verbose: false,
+        }
+    }
+
+    pub fn merge(&mut self, stat: StatisticInfo) {
+        StatisticInfo::merge_levels(&mut self.app_ids, stat.app_ids);
+        StatisticInfo::merge_levels(&mut self.context_ids, stat.context_ids);
+        StatisticInfo::merge_levels(&mut self.ecu_ids, stat.ecu_ids);
+        self.contained_non_verbose = if self.contained_non_verbose {
+            true
+        } else {
+            stat.contained_non_verbose
+        };
+    }
+
+    fn merge_levels(
+        owner: &mut Vec<(String, LevelDistribution)>,
+        incomes: Vec<(String, LevelDistribution)>,
+    ) {
+        incomes.iter().for_each(|(income_id, income)| {
+            if let Some((_, existed)) = owner.iter_mut().find(|(owner_id, _)| owner_id == income_id)
+            {
+                existed.merge(income);
+            } else {
+                owner.push((income_id.to_owned(), income.clone()));
+            }
+        });
+    }
+}
+
+impl Default for StatisticInfo {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Stats about a row in a DLT file
