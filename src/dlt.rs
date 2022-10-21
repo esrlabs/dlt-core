@@ -191,7 +191,7 @@ impl StorageHeader {
         buf.extend_from_slice(b"DLT");
         buf.put_u8(0x01);
         buf.put_u32_le(self.timestamp.seconds);
-        buf.put_u32_le(self.timestamp.microseconds as u32);
+        buf.put_u32_le(self.timestamp.microseconds);
         buf.put_zero_terminated_string(&self.ecu_id[..], 4);
         buf.to_vec()
     }
@@ -483,7 +483,7 @@ impl ExtendedHeader {
     #[allow(dead_code)]
     pub fn as_bytes(self: &ExtendedHeader) -> Vec<u8> {
         let mut buf = BytesMut::with_capacity(EXTENDED_HEADER_LENGTH as usize);
-        buf.put_u8(u8::from(&self.message_type) | if self.verbose { 1 } else { 0 });
+        buf.put_u8(u8::from(&self.message_type) | u8::from(self.verbose));
         buf.put_u8(self.argument_count);
         buf.put_zero_terminated_string(&self.application_id[..], 4);
         buf.put_zero_terminated_string(&self.context_id[..], 4);
@@ -798,8 +798,8 @@ impl TryFrom<u32> for TypeInfo {
             ))),
         }?;
         let coding = match (info >> 15) & 0b111 {
-            0x00 => (StringCoding::ASCII),
-            0x01 => (StringCoding::UTF8),
+            0x00 => StringCoding::ASCII,
+            0x01 => StringCoding::UTF8,
             v => {
                 trace!("Unknown coding in TypeInfo, assume UTF8");
                 StringCoding::Reserved(v as u8)

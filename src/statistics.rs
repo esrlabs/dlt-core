@@ -382,7 +382,7 @@ fn add_for_level(level: Option<LogLevel>, ids: &mut IdMap, id: String) {
 /// Count the dlt messages in a file. This assumes that messages are stored with using a `StorageHeader`
 pub fn count_dlt_messages(input: &Path) -> Result<u64, DltParseError> {
     if input.exists() {
-        let f = fs::File::open(&input)?;
+        let f = fs::File::open(input)?;
 
         let mut reader = ReduxReader::with_capacity(BIN_READER_CAPACITY, f)
             .set_policy(MinBuffered(BIN_MIN_BUFFER_SPACE));
