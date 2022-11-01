@@ -180,11 +180,7 @@ impl StatisticInfo {
         StatisticInfo::merge_levels(&mut self.app_ids, stat.app_ids);
         StatisticInfo::merge_levels(&mut self.context_ids, stat.context_ids);
         StatisticInfo::merge_levels(&mut self.ecu_ids, stat.ecu_ids);
-        self.contained_non_verbose = if self.contained_non_verbose {
-            true
-        } else {
-            stat.contained_non_verbose
-        };
+        self.contained_non_verbose = self.contained_non_verbose || stat.contained_non_verbose;
     }
 
     fn merge_levels(
