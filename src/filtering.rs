@@ -23,7 +23,7 @@ use std::{collections::HashSet, fs, io::Read, iter::FromIterator};
 ///
 /// only this is possible:
 /// - `app-id is_one_of ["abc","foo"] AND log-level <= DEBUG`
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DltFilterConfig {
     /// only select log entries with level MIN_LEVEL and more severe
     ///
