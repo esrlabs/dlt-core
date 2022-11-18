@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.2] - 2022-11-02
+
+### Added
+- Add support merging statistic info
+## [0.14.0] - 2022-02-15
+
+### Added
+- Add support for collecting statistics for dlt files
 ## [0.13.1] - 2022-02-10
 ### Fixed
 - fixed payload length validation (thanks to @eifert)
