@@ -811,37 +811,36 @@ impl<B: BufRead> Reader<B> {
                 XmlEvent::End(ref e) => match e.name().as_ref() {
                     B_PDU => {
                         return Ok(Event::PduEnd {
-                            short_name: mem::replace(&mut self.short_name, None),
-                            description: mem::replace(&mut self.description, None),
-                            byte_length: mem::replace(&mut self.byte_length, None).ok_or_else(
-                                || {
-                                    missing_tag_err(
-                                        B_BYTE_LENGTH,
-                                        B_PDU,
-                                        self.xml_reader.line_and_column(),
-                                    )
-                                },
-                            )?,
+                            short_name: mem::take(&mut self.short_name),
+                            description: mem::take(&mut self.description),
+                            byte_length: mem::take(&mut self.byte_length).ok_or_else(|| {
+                                missing_tag_err(
+                                    B_BYTE_LENGTH,
+                                    B_PDU,
+                                    self.xml_reader.line_and_column(),
+                                )
+                            })?,
                         });
                     }
                     B_SIGNAL_INSTANCE => {
                         return Ok(Event::SignalInstance {
-                            id: mem::replace(&mut self.id, None).ok_or_else(|| {
+                            id: mem::take(&mut self.id).ok_or_else(|| {
                                 missing_attr_err(
                                     B_ID,
                                     B_SIGNAL_INSTANCE,
                                     self.xml_reader.line_and_column(),
                                 )
                             })?,
-                            sequence_number: mem::replace(&mut self.sequence_number, None)
-                                .ok_or_else(|| {
+                            sequence_number: mem::take(&mut self.sequence_number).ok_or_else(
+                                || {
                                     missing_tag_err(
                                         B_SEQUENCE_NUMBER,
                                         B_SIGNAL_INSTANCE,
                                         self.xml_reader.line_and_column(),
                                     )
-                                })?,
-                            signal_ref: mem::replace(&mut self.r#ref, None).ok_or_else(|| {
+                                },
+                            )?,
+                            signal_ref: mem::take(&mut self.r#ref).ok_or_else(|| {
                                 missing_tag_err(
                                     B_SIGNAL_REF,
                                     B_SIGNAL_INSTANCE,
@@ -852,44 +851,41 @@ impl<B: BufRead> Reader<B> {
                     }
                     B_FRAME => {
                         return Ok(Event::FrameEnd {
-                            short_name: mem::replace(&mut self.short_name, None).ok_or_else(
-                                || {
-                                    missing_tag_err(
-                                        B_SHORT_NAME,
-                                        B_FRAME,
-                                        self.xml_reader.line_and_column(),
-                                    )
-                                },
-                            )?,
-                            byte_length: mem::replace(&mut self.byte_length, None).ok_or_else(
-                                || {
-                                    missing_tag_err(
-                                        B_BYTE_LENGTH,
-                                        B_FRAME,
-                                        self.xml_reader.line_and_column(),
-                                    )
-                                },
-                            )?,
+                            short_name: mem::take(&mut self.short_name).ok_or_else(|| {
+                                missing_tag_err(
+                                    B_SHORT_NAME,
+                                    B_FRAME,
+                                    self.xml_reader.line_and_column(),
+                                )
+                            })?,
+                            byte_length: mem::take(&mut self.byte_length).ok_or_else(|| {
+                                missing_tag_err(
+                                    B_BYTE_LENGTH,
+                                    B_FRAME,
+                                    self.xml_reader.line_and_column(),
+                                )
+                            })?,
                         });
                     }
                     B_PDU_INSTANCE => {
                         return Ok(Event::PduInstance {
-                            id: mem::replace(&mut self.id, None).ok_or_else(|| {
+                            id: mem::take(&mut self.id).ok_or_else(|| {
                                 missing_attr_err(
                                     B_ID,
                                     B_PDU_INSTANCE,
                                     self.xml_reader.line_and_column(),
                                 )
                             })?,
-                            sequence_number: mem::replace(&mut self.sequence_number, None)
-                                .ok_or_else(|| {
+                            sequence_number: mem::take(&mut self.sequence_number).ok_or_else(
+                                || {
                                     missing_tag_err(
                                         B_SEQUENCE_NUMBER,
                                         B_PDU_INSTANCE,
                                         self.xml_reader.line_and_column(),
                                     )
-                                })?,
-                            pdu_ref: mem::replace(&mut self.r#ref, None).ok_or_else(|| {
+                                },
+                            )?,
+                            pdu_ref: mem::take(&mut self.r#ref).ok_or_else(|| {
                                 missing_tag_err(
                                     B_PDU_REF,
                                     B_PDU_INSTANCE,
@@ -900,18 +896,18 @@ impl<B: BufRead> Reader<B> {
                     }
                     B_MANUFACTURER_EXTENSION => {
                         return Ok(Event::ManufacturerExtension {
-                            application_id: mem::replace(&mut self.application_id, None),
-                            context_id: mem::replace(&mut self.context_id, None),
-                            message_type: mem::replace(&mut self.message_type, None),
-                            message_info: mem::replace(&mut self.message_info, None),
+                            application_id: mem::take(&mut self.application_id),
+                            context_id: mem::take(&mut self.context_id),
+                            message_type: mem::take(&mut self.message_type),
+                            message_info: mem::take(&mut self.message_info),
                         });
                     }
                     B_SIGNAL => {
                         return Ok(Event::Signal {
-                            id: mem::replace(&mut self.id, None).ok_or_else(|| {
+                            id: mem::take(&mut self.id).ok_or_else(|| {
                                 missing_attr_err(B_ID, B_SIGNAL, self.xml_reader.line_and_column())
                             })?,
-                            coding_ref: mem::replace(&mut self.r#ref, None).ok_or_else(|| {
+                            coding_ref: mem::take(&mut self.r#ref).ok_or_else(|| {
                                 missing_tag_err(
                                     B_CODING_REF,
                                     B_SIGNAL,
@@ -922,17 +918,18 @@ impl<B: BufRead> Reader<B> {
                     }
                     B_CODING => {
                         return Ok(Event::Coding {
-                            id: mem::replace(&mut self.id, None).ok_or_else(|| {
+                            id: mem::take(&mut self.id).ok_or_else(|| {
                                 missing_attr_err(B_ID, B_CODING, self.xml_reader.line_and_column())
                             })?,
-                            base_data_type: mem::replace(&mut self.base_data_type, None)
-                                .ok_or_else(|| {
+                            base_data_type: mem::take(&mut self.base_data_type).ok_or_else(
+                                || {
                                     missing_attr_err(
                                         B_BASE_DATA_TYPE,
                                         B_CODED_TYPE,
                                         self.xml_reader.line_and_column(),
                                     )
-                                })?,
+                                },
+                            )?,
                         });
                     }
                     _x => {}
