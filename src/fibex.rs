@@ -16,7 +16,11 @@
 //! that is stored in FIBEX files (Field Bus Exchange Format)
 use crate::dlt::{ExtendedHeader, FloatWidth, StringCoding, TypeInfo, TypeInfoKind, TypeLength};
 use quick_xml::{
-    events::{attributes::Attributes, BytesStart, Event as XmlEvent},
+    events::{
+        attributes::{AttrError, Attributes},
+        BytesStart, Event as XmlEvent,
+    },
+    name::QName,
     Reader as XmlReader,
 };
 use serde::{Deserialize, Serialize};
@@ -42,6 +46,9 @@ pub enum Error {
     /// Reading the xml failed
     #[error("XML error: {0:?}")]
     Xml(#[from] quick_xml::Error),
+    /// Reading an attribute failed
+    #[error("Attribute error: {0:?}")]
+    Attribute(#[from] AttrError),
     #[error("IO error: {0:?}")]
     Io(#[from] std::io::Error),
 }
@@ -543,10 +550,12 @@ impl<B: BufRead> XmlReaderWithContext<B> {
         self.xml_reader.buffer_position()
     }
     pub fn read_event<'a>(&mut self, buf: &'a mut Vec<u8>) -> Result<XmlEvent<'a>, Error> {
-        Ok(self.xml_reader.read_event(buf)?)
+        Ok(self.xml_reader.read_event_into(buf)?)
     }
     pub fn read_text(&mut self, tag: &[u8], buf: &mut Vec<u8>) -> Result<String, Error> {
-        Ok(self.xml_reader.read_text(tag, buf)?)
+        let span = self.xml_reader.read_to_end_into(QName(tag), buf)?;
+        let text = self.xml_reader.decoder().decode(&buf[0..span.len()])?;
+        Ok(text.into_owned())
     }
     pub fn line_and_column(&self) -> Result<(usize, usize), Error> {
         let s = std::fs::read_to_string(&self.file_path)?;
@@ -569,7 +578,7 @@ impl<B: BufRead> XmlReaderWithContext<B> {
         })
     }
     pub fn read_text_buf(&mut self, e: &BytesStart<'_>) -> Result<String, Error> {
-        self.read_text(e.name(), &mut Vec::new())
+        self.read_text(e.name().as_ref(), &mut Vec::new())
     }
     pub fn id_ref_attr(&self, e: &BytesStart<'_>, tag: &[u8]) -> Result<String, Error> {
         self.attr_opt(e.attributes(), B_ID_REF)?
@@ -592,21 +601,21 @@ impl<B: BufRead> XmlReaderWithContext<B> {
     pub fn attr_opt(&self, attrs: Attributes<'_>, name: &[u8]) -> Result<Option<String>, Error> {
         for attr in attrs {
             let attr = attr?;
-            let matches = if attr.key == name {
+            let matches = if attr.key.as_ref() == name {
                 true
             } else {
                 let name_len = name.len();
-                let key_len = attr.key.len();
+                let key_len = attr.key.0.len();
                 if key_len > name_len {
                     // support for namespaced attributes
-                    attr.key[key_len - name_len - 1] == b':'
-                        && &attr.key[key_len - name_len..] == name
+                    attr.key.0[key_len - name_len - 1] == b':'
+                        && &attr.key.0[key_len - name_len..] == name
                 } else {
                     false
                 }
             };
             if matches {
-                return Ok(Some(attr.unescape_and_decode_value(&self.xml_reader)?));
+                return Ok(Some(attr.unescape_value()?.into_owned()));
             }
         }
         Ok(None)
@@ -674,7 +683,7 @@ impl<B: BufRead> Reader<B> {
     pub fn read_event(&mut self) -> Result<Event, Error> {
         loop {
             match self.xml_reader.read_event(&mut self.buf)? {
-                XmlEvent::Start(ref e) => match e.local_name() {
+                XmlEvent::Start(ref e) => match e.name().as_ref() {
                     B_PDU => {
                         self.short_name = None;
                         self.byte_length = None;
@@ -685,8 +694,10 @@ impl<B: BufRead> Reader<B> {
                         });
                     }
                     B_SHORT_NAME => {
-                        self.short_name =
-                            Some(self.xml_reader.read_text(e.name(), &mut self.buf2)?);
+                        self.short_name = Some(
+                            self.xml_reader
+                                .read_text(e.name().as_ref(), &mut self.buf2)?,
+                        );
                         self.buf2.clear();
                     }
                     B_BYTE_LENGTH => {
@@ -704,11 +715,17 @@ impl<B: BufRead> Reader<B> {
                         self.r#ref = Some(self.xml_reader.id_ref_attr(e, B_SIGNAL_REF)?)
                     }
                     B_PDU_TYPE => {
-                        self.r#type = Some(self.xml_reader.read_text(e.name(), &mut self.buf2)?);
+                        self.r#type = Some(
+                            self.xml_reader
+                                .read_text(e.name().as_ref(), &mut self.buf2)?,
+                        );
                         self.buf2.clear();
                     }
                     B_FRAME_TYPE => {
-                        self.r#type = Some(self.xml_reader.read_text(e.name(), &mut self.buf2)?);
+                        self.r#type = Some(
+                            self.xml_reader
+                                .read_text(e.name().as_ref(), &mut self.buf2)?,
+                        );
                         self.buf.clear();
                     }
                     B_FRAME => {
@@ -734,24 +751,34 @@ impl<B: BufRead> Reader<B> {
                         self.message_type = None;
                     }
                     B_APPLICATION_ID => {
-                        self.application_id =
-                            Some(self.xml_reader.read_text(e.name(), &mut self.buf2)?);
+                        self.application_id = Some(
+                            self.xml_reader
+                                .read_text(e.name().as_ref(), &mut self.buf2)?,
+                        );
                     }
                     B_CONTEXT_ID => {
-                        self.context_id =
-                            Some(self.xml_reader.read_text(e.name(), &mut self.buf2)?);
+                        self.context_id = Some(
+                            self.xml_reader
+                                .read_text(e.name().as_ref(), &mut self.buf2)?,
+                        );
                     }
                     B_MESSAGE_INFO => {
-                        self.message_info =
-                            Some(self.xml_reader.read_text(e.name(), &mut self.buf2)?);
+                        self.message_info = Some(
+                            self.xml_reader
+                                .read_text(e.name().as_ref(), &mut self.buf2)?,
+                        );
                     }
                     B_MESSAGE_TYPE => {
-                        self.message_type =
-                            Some(self.xml_reader.read_text(e.name(), &mut self.buf2)?);
+                        self.message_type = Some(
+                            self.xml_reader
+                                .read_text(e.name().as_ref(), &mut self.buf2)?,
+                        );
                     }
                     B_DESC => {
-                        self.description =
-                            Some(self.xml_reader.read_text(e.name(), &mut self.buf2)?);
+                        self.description = Some(
+                            self.xml_reader
+                                .read_text(e.name().as_ref(), &mut self.buf2)?,
+                        );
                     }
                     B_CODING => {
                         self.id = Some(self.xml_reader.id_attr(e, B_CODING)?);
@@ -769,7 +796,7 @@ impl<B: BufRead> Reader<B> {
                         // trace!("read_event (unknown: {:?})", _x);
                     }
                 },
-                XmlEvent::Empty(ref e) => match e.local_name() {
+                XmlEvent::Empty(ref e) => match e.name().as_ref() {
                     B_SIGNAL_REF => {
                         self.r#ref = Some(self.xml_reader.id_ref_attr(e, B_SIGNAL_REF)?)
                     }
@@ -781,7 +808,7 @@ impl<B: BufRead> Reader<B> {
                         trace!("XmlEvent::Empty (unknown: {:?})", x);
                     }
                 },
-                XmlEvent::End(ref e) => match e.local_name() {
+                XmlEvent::End(ref e) => match e.name().as_ref() {
                     B_PDU => {
                         return Ok(Event::PduEnd {
                             short_name: mem::replace(&mut self.short_name, None),
