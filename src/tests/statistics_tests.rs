@@ -84,6 +84,6 @@ mod tests {
         assert_eq!(stat_a.ecu_ids[1].1.log_error, 2);
         assert_eq!(stat_a.ecu_ids[2].1.log_verbose, 2);
         assert_eq!(stat_a.ecu_ids[3].1.log_warning, 2);
-        assert_eq!(stat_a.contained_non_verbose, true);
+        assert!(stat_a.contained_non_verbose);
     }
 }
