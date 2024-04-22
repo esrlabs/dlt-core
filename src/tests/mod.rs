@@ -13,4 +13,5 @@
 mod dlt_tests;
 mod dlt_parse_tests;
 mod fibex_tests;
+#[cfg(feature = "statistics")]
 mod statistics_tests;

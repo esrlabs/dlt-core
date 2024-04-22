@@ -10,7 +10,7 @@ license = "Apache-2.0"
 repository = "https://github.com/esrlabs/dlt-core"
 
 [dependencies]
-buf_redux = "0.8.4"
+buf_redux = { version = "0.8.4", optional = true }
 byteorder = "1.4"
 bytes = "1.0"
 derive_more = "0.99.13"
@@ -26,6 +26,7 @@ thiserror = "1.0"
 
 [features]
 default = []
+statistics = [ "buf_redux" ]
 
 [dev-dependencies]
 criterion = { version = "0.4", features = ["html_reports"] }

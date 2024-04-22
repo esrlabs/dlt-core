@@ -26,6 +26,7 @@ pub mod parse;
 #[cfg(not(tarpaulin_include))]
 pub mod service_id;
 #[cfg(not(tarpaulin_include))]
+#[cfg(feature = "statistics")]
 pub mod statistics;
 
 #[cfg(test)]
