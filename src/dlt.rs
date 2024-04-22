@@ -1356,7 +1356,7 @@ fn put_signed_value<T: ByteOrder>(value: &Value, buf: &mut BytesMut) {
 impl PayloadContent {
     pub fn arg_count(&self) -> u8 {
         match &self {
-            PayloadContent::Verbose(args) => std::cmp::min(args.len() as u8, u8::max_value()),
+            PayloadContent::Verbose(args) => std::cmp::min(args.len() as u8, u8::MAX),
             _ => 0,
         }
     }

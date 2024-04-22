@@ -975,6 +975,7 @@ pub(crate) fn validated_payload_length(
     Ok(payload_length)
 }
 
+#[cfg(feature = "statistics")]
 pub(crate) fn skip_till_after_next_storage_header(
     input: &[u8],
 ) -> Result<(&[u8], u64), DltParseError> {
@@ -1009,9 +1010,9 @@ pub fn dlt_consume_msg(input: &[u8]) -> IResult<&[u8], Option<u64>, DltParseErro
     }
     let (after_storage_header, skipped_bytes) = skip_storage_header(input)?;
     let (_, header) = dlt_standard_header(after_storage_header)?;
-    let overall_length_without_storage_header = header.overall_length() as u64;
+    let overall_length_without_storage_header = header.overall_length();
     let (after_message, _) = take(overall_length_without_storage_header)(after_storage_header)?;
-    let consumed = skipped_bytes + overall_length_without_storage_header;
+    let consumed = skipped_bytes + overall_length_without_storage_header as u64;
     Ok((after_message, Some(consumed)))
 }
 
