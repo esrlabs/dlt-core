@@ -1,6 +1,6 @@
 [package]
 name = "dlt-core"
-version = "0.14.5"
+version = "0.15.0"
 authors = ["esrlabs.com"]
 edition = "2021"
 description = """
