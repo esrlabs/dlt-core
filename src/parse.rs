@@ -225,7 +225,7 @@ fn nom_to_dlt_parse_error(ne: nom::Err<DltParseError>, desc: &str) -> DltParseEr
 
 /// The standard header is part of every DLT message
 /// all big endian format [PRS_Dlt_00091]
-pub(crate) fn dlt_standard_header(input: &[u8]) -> IResult<&[u8], StandardHeader, DltParseError> {
+pub fn dlt_standard_header(input: &[u8]) -> IResult<&[u8], StandardHeader, DltParseError> {
     let (input, header_type_byte) = be_u8(input)?;
     let has_ecu_id = (header_type_byte & WITH_ECU_ID_FLAG) != 0;
     let has_session_id = (header_type_byte & WITH_SESSION_ID_FLAG) != 0;
