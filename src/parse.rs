@@ -678,10 +678,24 @@ fn dlt_payload<T: NomByteOrder>(
     payload_length: u16,
     arg_cnt: u8,
     is_controll_msg: bool,
+    is_network_trace_msg: bool,
 ) -> IResult<&[u8], PayloadContent, DltParseError> {
     if verbose {
         match count(dlt_argument::<T>, arg_cnt as usize)(input) {
-            Ok((rest, arguments)) => Ok((rest, PayloadContent::Verbose(arguments))),
+            Ok((rest, arguments)) => {
+                if is_network_trace_msg {
+                    let slices = arguments
+                        .iter()
+                        .map(|i| match &i.value {
+                            Value::Raw(bytes) => bytes.clone(),
+                            _ => vec![], // TODO raise error?!
+                        })
+                        .collect();
+                    Ok((rest, PayloadContent::NetworkTrace(slices)))
+                } else {
+                    Ok((rest, PayloadContent::Verbose(arguments)))
+                }
+            }
             Err(e) => Err(add_context(
                 e,
                 format!("Problem parsing {} arguments", arg_cnt),
@@ -834,12 +848,14 @@ fn dlt_message_intern<'a>(
 
     let mut verbose: bool = false;
     let mut is_controll_msg = false;
+    let mut is_network_trace_msg = false;
     let mut arg_count = 0;
     let (after_headers, extended_header) = if header.has_extended_header {
         let (rest, ext_header) = dlt_extended_header(after_storage_and_normal_header)?;
         verbose = ext_header.verbose;
         arg_count = ext_header.argument_count;
         is_controll_msg = matches!(ext_header.message_type, MessageType::Control(_));
+        is_network_trace_msg = matches!(ext_header.message_type, MessageType::NetworkTrace(_));
         dbg_parsed(
             "extended header",
             after_storage_and_normal_header,
@@ -880,6 +896,7 @@ fn dlt_message_intern<'a>(
             payload_length,
             arg_count,
             is_controll_msg,
+            is_network_trace_msg,
         )?
     } else {
         dlt_payload::<LittleEndian>(
@@ -888,6 +905,7 @@ fn dlt_message_intern<'a>(
             payload_length,
             arg_count,
             is_controll_msg,
+            is_network_trace_msg,
         )?
     };
     dbg_parsed("payload", after_headers, i, &payload);
