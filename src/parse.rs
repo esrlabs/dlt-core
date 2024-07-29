@@ -677,17 +677,30 @@ fn dlt_payload<T: NomByteOrder>(
     verbose: bool,
     payload_length: u16,
     arg_cnt: u8,
-    is_controll_msg: bool,
+    msg_type: Option<MessageType>,
 ) -> IResult<&[u8], PayloadContent, DltParseError> {
     if verbose {
         match count(dlt_argument::<T>, arg_cnt as usize)(input) {
-            Ok((rest, arguments)) => Ok((rest, PayloadContent::Verbose(arguments))),
+            Ok((rest, arguments)) => {
+                if let Some(MessageType::NetworkTrace(_)) = msg_type {
+                    let slices = arguments
+                        .iter()
+                        .filter_map(|i| match &i.value {
+                            Value::Raw(bytes) => Some(bytes.clone()),
+                            _ => None,
+                        })
+                        .collect();
+                    Ok((rest, PayloadContent::NetworkTrace(slices)))
+                } else {
+                    Ok((rest, PayloadContent::Verbose(arguments)))
+                }
+            }
             Err(e) => Err(add_context(
                 e,
                 format!("Problem parsing {} arguments", arg_cnt),
             )),
         }
-    } else if is_controll_msg {
+    } else if let Some(MessageType::Control(_)) = msg_type {
         if payload_length < 1 {
             return Err(nom::Err::Failure(DltParseError::ParsingHickup(format!(
                 "error, payload too short {}",
@@ -833,13 +846,13 @@ fn dlt_message_intern<'a>(
     let payload_length_res = validated_payload_length(&header, after_storage_header.len());
 
     let mut verbose: bool = false;
-    let mut is_controll_msg = false;
+    let mut msg_type: Option<MessageType> = None;
     let mut arg_count = 0;
     let (after_headers, extended_header) = if header.has_extended_header {
         let (rest, ext_header) = dlt_extended_header(after_storage_and_normal_header)?;
         verbose = ext_header.verbose;
         arg_count = ext_header.argument_count;
-        is_controll_msg = matches!(ext_header.message_type, MessageType::Control(_));
+        msg_type = Some(ext_header.message_type.clone());
         dbg_parsed(
             "extended header",
             after_storage_and_normal_header,
@@ -874,21 +887,9 @@ fn dlt_message_intern<'a>(
         ));
     }
     let (i, payload) = if header.endianness == Endianness::Big {
-        dlt_payload::<BigEndian>(
-            after_headers,
-            verbose,
-            payload_length,
-            arg_count,
-            is_controll_msg,
-        )?
+        dlt_payload::<BigEndian>(after_headers, verbose, payload_length, arg_count, msg_type)?
     } else {
-        dlt_payload::<LittleEndian>(
-            after_headers,
-            verbose,
-            payload_length,
-            arg_count,
-            is_controll_msg,
-        )?
+        dlt_payload::<LittleEndian>(after_headers, verbose, payload_length, arg_count, msg_type)?
     };
     dbg_parsed("payload", after_headers, i, &payload);
     Ok((
