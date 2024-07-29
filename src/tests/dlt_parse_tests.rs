@@ -141,6 +141,72 @@ mod tests {
     }
 
     #[test]
+    fn test_dlt_network_trace_msg() {
+        init_logging();
+        #[rustfmt::skip]
+        let raw1: Vec<u8> = vec![
+            // --------------- storage header
+            /* DLT + 0x01 */ 0x44, 0x4c, 0x54, 0x01, 
+            /* timestamp sec */ 0xbc, 0xa6, 0xd4, 0x65, 
+            /* timestamp us */ 0x27, 0x13, 0x07, 0x00, 
+            /* ecu id "ECU" */ 0x49, 0x44, 0x43, 0x45,
+            // --------------- header
+            /* header-type       0b0011 1101 */ 0x3d,
+            /* extended header        | |||^ */
+            /* MSBF: 0  little endian | ||^  */
+            /* WEID: 0  no ecu id     | |^   */
+            /* WSID: 0  sess id       | ^    */
+            /* WTMS: 0 no timestamp   ^      */
+            /* version nummber 1   ^^^       */
+            /* message counter */ 0x40, 
+            /* length = 0 */ 0x00, 0x48, 
+            0x49, 0x44, 0x43, 0x45, // ecu-id
+            0x00, 0x00, 0x02, 0x4f, // session-id
+            0x01, 0xba, 0x71, 0xb6, // timestamp
+            // --------------- extended header
+            0x15, // MSIN 0b0001 0101 => IPC/NW-Trace
+            0x02, // arg count
+            0x4e, 0x32, 0x53, 0x49, // app-id
+            0x54, 0x43, 0x00, 0x00, // ctx-id
+            /* === arg 1 (some/ip info) === */
+            /* type info */ 0x00, 0x04, 0x00, 0x00, 0x0a, 0x00, // type rawd + len(16bit)
+            0x00, 0x00, 0x00, 0x00, // ipv4
+            0x00, 0x00, // port
+            0xff, // protocol
+            0x01, // direction
+            0x00, 0x01, // instance-id (1|2|4 byte)
+            /* === arg 2 (some/ip message) === */
+            /* type info */ 0x00, 0x04, 0x00, 0x00, 0x18, 0x00, // type rawd + len(16bit)
+            0xf9, 0x61, 0x85, 0x1d, 0x00, 0x00, 0x00, 0x10, 
+            0x00, 0x00, 0x28, 0x15, 0x01, 0x01, 0x02, 0x00,
+            0x01, 0xfe, 0xfc, 0xff, 0xff, 0xff, 0xff, 0xff,
+        ];
+        match dlt_message(&raw1[..], None, true) {
+            Ok((_rest, ParsedMessage::Item(msg))) => {
+                let ext_hdr = msg.extended_header.as_ref().unwrap();
+                assert!(ext_hdr.verbose);
+                assert_eq!(2, ext_hdr.argument_count);
+                if let PayloadContent::NetworkTrace(slices) = &msg.payload {
+                    assert_eq!(2, slices.len());
+                    let slice = vec![0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x01, 0x00, 0x01];
+                    assert_eq!(slice, slices[0]);
+                    let slice = vec![
+                        0xf9, 0x61, 0x85, 0x1d, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x28, 0x15,
+                        0x01, 0x01, 0x02, 0x00, 0x01, 0xfe, 0xfc, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    ];
+                    assert_eq!(slice, slices[1]);
+                } else {
+                    panic!("unexpected payload type");
+                }
+                let msg_bytes = msg.as_bytes();
+                assert_eq!(raw1, msg_bytes);
+            }
+            _ => panic!("could not parse message"),
+        }
+        // println!("msg bytes: {:02X?}", msg_bytes);
+    }
+
+    #[test]
     fn test_dlt_message_parsing() {
         init_logging();
         #[rustfmt::skip]

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<fx:FIBEX xmlns:ho="http://www.asam.net/xml" xmlns:fx="http://www.asam.net/xml/fbx">
+    <fx:PROJECT ID="Project">
+        <ho:SHORT-NAME>ProjectName</ho:SHORT-NAME>
+    </fx:PROJECT>
+    <fx:ELEMENTS>
+        <fx:PDUS>
+
+            <!-- A PDU without description should not break FIBEX parsing -->
+            <fx:PDU ID="ID_PDU_01">
+                <ho:SHORT-NAME>ID_PDU_01</ho:SHORT-NAME>
+                <ho:DESC></ho:DESC>
+                <fx:BYTE-LENGTH>0</fx:BYTE-LENGTH>
+                <fx:PDU-TYPE>OTHER</fx:PDU-TYPE>
+            </fx:PDU>
+
+        </fx:PDUS>
+
+    </fx:ELEMENTS>
+        <fx:PROCESSING-INFORMATION>
+            <fx:CODINGS>
+
+                <!-- Codings should not break FIBEX parsing -->
+                <fx:CODING ID="ID_CODING_01">
+                    <ho:SHORT-NAME>ID_CODING_01</ho:SHORT-NAME>
+                    <ho:CODED-TYPE ho:BASE-DATA-TYPE="A_UINT8" CATEGORY="STANDARD-LENGTH-TYPE"/>
+                </fx:CODING>
+                
+            </fx:CODINGS>
+        </fx:PROCESSING-INFORMATION>
+</fx:FIBEX>
+

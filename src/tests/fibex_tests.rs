@@ -306,4 +306,14 @@ mod tests {
             }
         );
     }
+
+    #[test]
+    fn test_fibex_robustness() {
+        let fibex = read_fibexes(vec![
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/robustness.xml")
+        ])
+        .expect("can't parse fibex");
+
+        println!("{:?}", fibex);
+    }
 }

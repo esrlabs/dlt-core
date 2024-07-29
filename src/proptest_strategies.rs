@@ -13,7 +13,8 @@
 //! # proptest support for generating dlt data structures
 use crate::dlt::*;
 use byteorder::{BigEndian, LittleEndian};
-use proptest::prelude::*;
+use proptest::{collection::hash_set, prelude::*};
+use std::collections::HashSet;
 
 prop_compose! {
     fn ecu_id_strategy()(id in "[a-zA-Z]{2,5}") /*"*/-> Option<String> {
@@ -94,6 +95,7 @@ prop_compose! {
             PayloadContent::ControlMsg(control_type, _) => MessageType::Control(control_type.clone()),
             PayloadContent::Verbose(_) => MessageType::Log(LogLevel::Warn),
             PayloadContent::NonVerbose(_, _) => MessageType::Log(LogLevel::Debug),
+            PayloadContent::NetworkTrace(_) => MessageType::NetworkTrace(NetworkTraceType::Ipc)
         };
         // println!("... to {}", real_msg_type);
         // correct extended header fiels according to payload
@@ -285,4 +287,21 @@ fn extheader_payload_endian_strategy(
         };
         (Just(ext_h), payload, any::<Endianness>())
     })
+}
+
+pub fn vec_of_vec() -> impl Strategy<Value = Vec<Vec<u8>>> {
+    const N: u8 = 10;
+
+    let length = 0..N;
+    length
+        .prop_flat_map(vec_from_length)
+        .prop_map(|i| i.into_iter().map(Vec::from_iter).collect())
+}
+
+fn vec_from_length(length: u8) -> impl Strategy<Value = Vec<HashSet<u8>>> {
+    const K: usize = 5;
+
+    (1..length) // ensure unique elements
+        .map(|index| hash_set(0..index, 0..K))
+        .collect::<Vec<_>>()
 }

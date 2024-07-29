@@ -144,6 +144,11 @@ pub enum PayloadContent {
         )
     )]
     ControlMsg(ControlType, Vec<u8>),
+    #[cfg_attr(
+        test,
+        proptest(strategy = "vec_of_vec().prop_map(PayloadContent::NetworkTrace)")
+    )]
+    NetworkTrace(Vec<Vec<u8>>),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -819,9 +824,9 @@ impl TryFrom<u32> for TypeInfo {
 ///
 /// * phy_v is what we received in the dlt message
 /// * log_v is the real value
-/// example: the degree celcius is transmitted,
-/// quantization = 0.01, offset = -50
-/// now the transmitted value phy_v = (log_v - offset)/quantization = 7785
+///     example: the degree celcius is transmitted,
+///     quantization = 0.01, offset = -50
+///     now the transmitted value phy_v = (log_v - offset)/quantization = 7785
 ///
 /// The width depends on the TYLE value
 ///     * i32 bit if Type Length (TYLE) equals 1,2 or 3
@@ -1400,6 +1405,20 @@ impl PayloadContent {
                 buf.put_u8(ctrl_id.value());
                 buf.extend_from_slice(&payload[..]);
             }
+            PayloadContent::NetworkTrace(slices) => {
+                for slice in slices {
+                    // type-info (rawd)
+                    const TYPE_INFO_BYTES: &[u8] = &[0x00, 0x04, 0x00, 0x00];
+                    buf.extend_from_slice(TYPE_INFO_BYTES);
+
+                    // len (16bit)
+                    let mut tmp_buf = [0; 2];
+                    T::write_u16(&mut tmp_buf, slice.len() as u16);
+                    buf.extend_from_slice(&tmp_buf);
+
+                    buf.extend_from_slice(slice);
+                }
+            }
         }
         buf.to_vec()
     }
@@ -1414,6 +1433,11 @@ fn payload_content_len(content: &PayloadContent) -> usize {
         }),
         PayloadContent::NonVerbose(_id, payload) => 4usize + payload.len(),
         PayloadContent::ControlMsg(_id, payload) => 1usize + payload.len(),
+        PayloadContent::NetworkTrace(slices) => slices.iter().fold(0usize, |mut sum, slice| {
+            let new_len = slice.len() + 2 /* 16bit len */;
+            sum += new_len;
+            sum
+        }),
     }
 }
 

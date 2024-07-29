@@ -1,6 +1,6 @@
 [package]
 name = "dlt-core"
-version = "0.15.0"
+version = "0.16.0"
 authors = ["esrlabs.com"]
 edition = "2021"
 description = """
@@ -27,6 +27,10 @@ thiserror = "1.0"
 [features]
 default = []
 statistics = [ "buf_redux" ]
+debug_parser = []
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin_include)'] }
 
 [dev-dependencies]
 criterion = { version = "0.4", features = ["html_reports"] }

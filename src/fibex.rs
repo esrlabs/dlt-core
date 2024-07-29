@@ -557,9 +557,14 @@ impl<B: BufRead> XmlReaderWithContext<B> {
                 Ok(text) => Ok(text.into_owned()),
                 Err(error) => Err(Error::Xml(error)),
             },
-            _x => Err(Error::Parse(format!("read_text (unexpected: {:?})", _x))),
+            x => Err(Error::Parse(format!(
+                "read_text (unexpected: {:?}) at {}",
+                x,
+                self.buffer_position()
+            ))),
         }
     }
+    // Note: Use this only on fatal errors due performance.
     pub fn line_and_column(&self) -> Result<(usize, usize), Error> {
         let s = std::fs::read_to_string(&self.file_path)?;
         let mut line = 1;
@@ -756,7 +761,7 @@ impl<B: BufRead> Reader<B> {
                         self.message_type = Some(self.xml_reader.read_text(&mut self.buf2)?);
                     }
                     B_DESC => {
-                        self.description = Some(self.xml_reader.read_text(&mut self.buf2)?);
+                        self.description = self.xml_reader.read_text(&mut self.buf2).ok();
                     }
                     B_CODING => {
                         self.id = Some(self.xml_reader.id_attr(e, B_CODING)?);
@@ -781,6 +786,10 @@ impl<B: BufRead> Reader<B> {
                     B_PDU_REF => self.r#ref = Some(self.xml_reader.id_ref_attr(e, B_PDU_REF)?),
                     B_CODING_REF => {
                         self.r#ref = Some(self.xml_reader.id_ref_attr(e, B_SIGNAL_REF)?);
+                    }
+                    B_CODED_TYPE => {
+                        self.base_data_type =
+                            self.xml_reader.attr(e, B_BASE_DATA_TYPE, B_CODED_TYPE).ok();
                     }
                     x => {
                         trace!("XmlEvent::Empty (unknown: {:?})", x);
