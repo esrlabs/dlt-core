@@ -557,7 +557,13 @@ impl<B: BufRead> XmlReaderWithContext<B> {
                 Ok(text) => Ok(text.into_owned()),
                 Err(error) => Err(Error::Xml(error)),
             },
-            _x => Err(Error::Parse(format!("read_text (unexpected: {:?})", _x))),
+            _x => {
+                let (line, column) = self.line_and_column()?;
+                Err(Error::Parse(format!(
+                    "read_text (unexpected: {:?}) at {}:{}",
+                    _x, line, column
+                )))
+            }
         }
     }
     pub fn line_and_column(&self) -> Result<(usize, usize), Error> {
@@ -756,7 +762,10 @@ impl<B: BufRead> Reader<B> {
                         self.message_type = Some(self.xml_reader.read_text(&mut self.buf2)?);
                     }
                     B_DESC => {
-                        self.description = Some(self.xml_reader.read_text(&mut self.buf2)?);
+                        self.description = match self.xml_reader.read_text(&mut self.buf2) {
+                            Ok(desc) => Some(desc),
+                            Err(_) => None,
+                        };
                     }
                     B_CODING => {
                         self.id = Some(self.xml_reader.id_attr(e, B_CODING)?);
@@ -781,6 +790,10 @@ impl<B: BufRead> Reader<B> {
                     B_PDU_REF => self.r#ref = Some(self.xml_reader.id_ref_attr(e, B_PDU_REF)?),
                     B_CODING_REF => {
                         self.r#ref = Some(self.xml_reader.id_ref_attr(e, B_SIGNAL_REF)?);
+                    }
+                    B_CODED_TYPE => {
+                        self.base_data_type =
+                            self.xml_reader.attr(e, B_BASE_DATA_TYPE, B_CODED_TYPE).ok();
                     }
                     x => {
                         trace!("XmlEvent::Empty (unknown: {:?})", x);
