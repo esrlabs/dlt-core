@@ -49,6 +49,7 @@ pub struct DltFilterConfig {
 }
 
 /// A processed version of the filter configuration that can be used to parse dlt.
+///
 /// When a `DltFilterConfig` is received (e.g. as serialized json), this can easily
 /// be converted into this processed version using `filter_config.into()`
 #[derive(Clone, Debug)]

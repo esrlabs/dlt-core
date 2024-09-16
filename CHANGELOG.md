@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Support parsing of DLT network traces
 
+## [0.15.0] - 2024-05-03
+### Changed
+- Made dlt-statistics a separate feature
+
 ## [0.14.4] - 2023-07-21
 ### Changed
 - Updated quick-xml library and dependencies
