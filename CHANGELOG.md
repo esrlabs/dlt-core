@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2024-10-04
+### Changed
+- breaking change in API: Remove `nom` crate types from the return types of parsing functions. 
+
 ## [0.16.0] - 2024-08-16
 ### Added
 - Support parsing of DLT network traces
