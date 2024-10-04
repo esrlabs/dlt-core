@@ -853,16 +853,16 @@ mod tests {
     fn test_dlt_zero_terminated_string_exact() {
         let mut buf = BytesMut::with_capacity(4);
         buf.extend_from_slice(b"id42");
-        let res: IResult<&[u8], &str, DltParseError> = dlt_zero_terminated_string(&buf, 4);
-        let expected: IResult<&[u8], &str, DltParseError> = Ok((&[], "id42"));
+        let res = dlt_zero_terminated_string(&buf, 4);
+        let expected: Result<(&[u8], &str), DltParseError> = Ok((&[], "id42"));
         assert_eq!(expected, res);
     }
     #[test]
     fn test_dlt_zero_terminated_string_more_data() {
         let mut buf = BytesMut::with_capacity(6);
         buf.extend_from_slice(b"id42++");
-        let res: IResult<&[u8], &str, DltParseError> = dlt_zero_terminated_string(&buf, 4);
-        let expected: IResult<&[u8], &str, DltParseError> = Ok((b"++", "id42"));
+        let res = dlt_zero_terminated_string(&buf, 4);
+        let expected: Result<(&[u8], &str), DltParseError> = Ok((b"++", "id42"));
         assert_eq!(expected, res);
     }
     #[test]
@@ -871,20 +871,20 @@ mod tests {
         buf.extend_from_slice(b"id\0");
         assert!(matches!(
             dlt_zero_terminated_string(&buf, 4),
-            Err(nom::Err::Incomplete(nom::Needed::Size(_)))
+            Err(DltParseError::IncompleteParse { .. })
         ));
         buf.clear();
         buf.extend_from_slice(b"id\0\0");
-        let expected: IResult<&[u8], &str, DltParseError> = Ok((b"", "id"));
+        let expected: Result<(&[u8], &str), DltParseError> = Ok((b"", "id"));
         assert_eq!(expected, dlt_zero_terminated_string(&buf, 4));
     }
     #[test]
     fn test_dlt_zero_terminated_string_early_terminated() {
         let mut buf = BytesMut::with_capacity(4);
         buf.extend_from_slice(b"id4\0somethingelse");
-        let res: IResult<&[u8], &str, DltParseError> = dlt_zero_terminated_string(&buf, 4);
+        let res = dlt_zero_terminated_string(&buf, 4);
         trace!("res : {:?}", res);
-        let expected: IResult<&[u8], &str, DltParseError> = Ok((b"somethingelse", "id4"));
+        let expected: Result<(&[u8], &str), DltParseError> = Ok((b"somethingelse", "id4"));
         assert_eq!(expected, res);
     }
     #[test]
@@ -892,8 +892,8 @@ mod tests {
         let mut buf = BytesMut::with_capacity(4);
         let broken = vec![0x41, 0, 146, 150];
         buf.extend_from_slice(&broken);
-        let res: IResult<&[u8], &str, DltParseError> = dlt_zero_terminated_string(&buf, 4);
-        let expected: IResult<&[u8], &str, DltParseError> = Ok((b"", "A"));
+        let res = dlt_zero_terminated_string(&buf, 4);
+        let expected: Result<(&[u8], &str), DltParseError> = Ok((b"", "A"));
         assert_eq!(expected, res);
     }
 }
