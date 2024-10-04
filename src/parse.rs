@@ -43,7 +43,7 @@ use thiserror::Error;
 pub const DLT_PATTERN: &[u8] = &[0x44, 0x4C, 0x54, 0x01];
 
 pub(crate) fn parse_ecu_id(input: &[u8]) -> IResult<&[u8], &str, DltParseError> {
-    dlt_zero_terminated_string(input, 4)
+    dlt_zero_terminated_string_intern(input, 4)
 }
 
 impl ParseError<&[u8]> for DltParseError {
@@ -145,7 +145,7 @@ pub(crate) fn dlt_storage_header(
             let (input, (_, _, seconds, microseconds)) =
                 tuple((tag("DLT"), tag(&[0x01]), le_u32, le_u32))(rest)?;
 
-            let (after_string, ecu_id) = dlt_zero_terminated_string(input, 4)?;
+            let (after_string, ecu_id) = dlt_zero_terminated_string_intern(input, 4)?;
             Ok((
                 after_string,
                 Some((
@@ -318,7 +318,15 @@ fn is_not_null(chr: u8) -> bool {
 ///
 /// In various places within the DLT message, there can be strings that are
 /// terminated with a `\0`.
-pub fn dlt_zero_terminated_string(s: &[u8], size: usize) -> IResult<&[u8], &str, DltParseError> {
+pub fn dlt_zero_terminated_string(s: &[u8], size: usize) -> Result<(&[u8], &str), DltParseError> {
+    dlt_zero_terminated_string_intern(s, size).map_err(DltParseError::from)
+}
+
+/// Extracts the string in a byte sequence up to the `\0` termination character
+///
+/// In various places within the DLT message, there can be strings that are
+/// terminated with a `\0`.
+fn dlt_zero_terminated_string_intern(s: &[u8], size: usize) -> IResult<&[u8], &str, DltParseError> {
     let (rest_with_null, content_without_null) = take_while_m_n(0, size, is_not_null)(s)?;
     let res_str = match nom::lib::std::str::from_utf8(content_without_null) {
         Ok(content) => content,
@@ -334,7 +342,7 @@ pub fn dlt_zero_terminated_string(s: &[u8], size: usize) -> IResult<&[u8], &str,
 
 fn dlt_variable_name<T: NomByteOrder>(input: &[u8]) -> IResult<&[u8], String, DltParseError> {
     let (i, size) = T::parse_u16(input)?;
-    let (i2, name) = dlt_zero_terminated_string(i, size as usize)?;
+    let (i2, name) = dlt_zero_terminated_string_intern(i, size as usize)?;
     Ok((i2, name.to_string()))
 }
 
@@ -393,9 +401,10 @@ fn dlt_variable_name_and_unit<T: NomByteOrder>(
         |input: &[u8]| -> IResult<&[u8], (Option<String>, Option<String>), DltParseError> {
             let (i2, name_size_unit_size) = tuple((T::parse_u16, T::parse_u16))(input)?;
             dbg_parsed("namesize, unitsize", input, i2, &name_size_unit_size);
-            let (i3, name) = dlt_zero_terminated_string(i2, name_size_unit_size.0 as usize)?;
+            let (i3, name) = dlt_zero_terminated_string_intern(i2, name_size_unit_size.0 as usize)?;
             dbg_parsed("name", i2, i3, &name);
-            let (rest, unit) = dlt_zero_terminated_string(i3, name_size_unit_size.1 as usize)?;
+            let (rest, unit) =
+                dlt_zero_terminated_string_intern(i3, name_size_unit_size.1 as usize)?;
             dbg_parsed("unit", i3, rest, &unit);
             Ok((rest, (Some(name.to_string()), Some(unit.to_string()))))
         }
@@ -651,7 +660,7 @@ pub(crate) fn dlt_argument<T: NomByteOrder>(
             } else {
                 (i2, None)
             };
-            let (rest, value) = dlt_zero_terminated_string(i3, size as usize)?;
+            let (rest, value) = dlt_zero_terminated_string_intern(i3, size as usize)?;
             dbg_parsed("StringType", i3, rest, &value);
             Ok((
                 rest,
@@ -992,27 +1001,29 @@ pub(crate) fn skip_till_after_next_storage_header(
 }
 
 /// Remove the storage header from the input if present
-pub fn skip_storage_header(input: &[u8]) -> IResult<&[u8], u64, DltParseError> {
-    let (i, (_, _, _)): (&[u8], _) = tuple((tag("DLT"), tag(&[0x01]), take(12usize)))(input)?;
+pub fn skip_storage_header(input: &[u8]) -> Result<(&[u8], u64), DltParseError> {
+    let (i, (_, _, _)): (&[u8], _) = tuple((tag("DLT"), tag(&[0x01]), take(12usize)))(input)
+        .map_err(nom::Err::<DltParseError>::from)?;
     if input.len() - i.len() == STORAGE_HEADER_LENGTH as usize {
         Ok((i, STORAGE_HEADER_LENGTH))
     } else {
-        Err(Error(DltParseError::ParsingHickup(
+        Err(DltParseError::ParsingHickup(
             "did not match DLT pattern".into(),
-        )))
+        ))
     }
 }
 
 /// Skip one dlt message in the input stream in an efficient way
 /// pre: message to be parsed contains a storage header
-pub fn dlt_consume_msg(input: &[u8]) -> IResult<&[u8], Option<u64>, DltParseError> {
+pub fn dlt_consume_msg(input: &[u8]) -> Result<(&[u8], Option<u64>), DltParseError> {
     if input.is_empty() {
         return Ok((input, None));
     }
     let (after_storage_header, skipped_bytes) = skip_storage_header(input)?;
     let (_, header) = dlt_standard_header(after_storage_header)?;
     let overall_length_without_storage_header = header.overall_length();
-    let (after_message, _) = take(overall_length_without_storage_header)(after_storage_header)?;
+    let (after_message, _) = take(overall_length_without_storage_header)(after_storage_header)
+        .map_err(nom::Err::<DltParseError>::from)?;
     let consumed = skipped_bytes + overall_length_without_storage_header as u64;
     Ok((after_message, Some(consumed)))
 }
