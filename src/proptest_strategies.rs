@@ -199,15 +199,14 @@ fn fp_strategy(width: FloatWidth) -> impl Strategy<Value = FixedPoint> {
     })
 }
 
+type StrategyOut = (
+    TypeInfo,
+    Option<FixedPoint>,
+    Value,
+    (Option<String>, Option<String>),
+);
 // strategy that produces TypeInfo and matching optional FixedPoint for arguments
-fn type_info_and_fixed_point_strategy() -> impl Strategy<
-    Value = (
-        TypeInfo,
-        Option<FixedPoint>,
-        Value,
-        (Option<String>, Option<String>),
-    ),
-> {
+fn type_info_and_fixed_point_strategy() -> impl Strategy<Value = StrategyOut> {
     any::<TypeInfo>().prop_flat_map(move |ti| {
         let fp_strat = match ti.kind {
             TypeInfoKind::SignedFixedPoint(width) => fp_strategy(width).prop_map(Some).boxed(),

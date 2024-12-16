@@ -5,7 +5,7 @@
 
 A library that support efficient parsing & writing log-messages encoded as `Diagnositic` `Log` and `Trace` messages.
 
-## Features
+## Features / Functionality
 
 * compliant with the official Autosar DLT specification
 * efficiently parse binary DLT content
@@ -18,7 +18,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-dlt_core = "0.17"
+dlt_core = "0.18"
 ```
 
 This is an example of how to parse a message and serialize it back to a byte array.
@@ -130,3 +130,13 @@ fn main() {
 empty content after 33554430 parsed messages
 parsing 33554430 messages took 37.015s! (133.773 MB/s)
 ```
+
+Below is the revised and improved English version of the documentation:
+
+## Crate's Features
+
+- **`statistics`**: Enables the `statistics` module, which scans the source data and provides a summary of its contents. This gives you an overview of the number of messages and their content.
+
+- **`debug_parser`**: Adds additional log output for debugging purposes.
+
+- **`serde-support`**: Adds `Serialize` and `Deserialize` implementations (via `serde`) to all public types. This feature is useful if you need to encode or decode these types for transmission or storage.

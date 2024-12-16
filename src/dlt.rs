@@ -17,7 +17,6 @@
 
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
 use bytes::{BufMut, BytesMut};
-use serde::Serialize;
 use std::{convert::TryFrom, str};
 use thiserror::Error;
 
@@ -40,7 +39,11 @@ pub enum Error {
 }
 
 /// Used to express the byte order of DLT data type fields
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord, Serialize)]
+#[cfg_attr(
+    feature = "serde-support",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub enum Endianness {
     /// Little Endian
@@ -50,7 +53,11 @@ pub enum Endianness {
 }
 
 /// represents a DLT message including all headers
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "serde-support",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Message {
     pub storage_header: Option<StorageHeader>,
     pub header: StandardHeader,
@@ -59,7 +66,11 @@ pub struct Message {
 }
 
 /// Add some stupid docs
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "serde-support",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub struct StorageHeader {
     pub timestamp: DltTimeStamp,
@@ -68,7 +79,11 @@ pub struct StorageHeader {
 }
 
 /// The Standard Header shall be in big endian format
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "serde-support",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct StandardHeader {
     pub version: u8,
     pub endianness: Endianness,
@@ -89,7 +104,11 @@ pub struct StandardHeader {
 /// The Dlt Extended Header is directly attached after the Dlt Standard Header fields.
 ///
 /// The Extended Header shall be in big endian format
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "serde-support",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub struct ExtendedHeader {
     pub verbose: bool,
@@ -122,7 +141,11 @@ pub struct ExtendedHeader {
 /// Control messages are normal Dlt messages with a Standard Header, an Extended Header,
 /// and payload. The payload contains of the Service ID and the contained parameters.
 ///
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "serde-support",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub enum PayloadContent {
     #[cfg_attr(
@@ -151,7 +174,11 @@ pub enum PayloadContent {
     NetworkTrace(Vec<Vec<u8>>),
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "serde-support",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub struct DltTimeStamp {
     pub seconds: u32,
@@ -313,7 +340,11 @@ impl StandardHeader {
 }
 
 /// Representation of log levels used in DLT log messages
-#[derive(Debug, PartialEq, PartialOrd, Clone, Copy, Serialize)]
+#[cfg_attr(
+    feature = "serde-support",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Debug, PartialEq, PartialOrd, Clone, Copy)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub enum LogLevel {
     Fatal,
@@ -344,7 +375,11 @@ impl AsRef<str> for LogLevel {
 ///
 /// In case the dlt message contains tracing information, the Trace-Type
 /// indicates different kinds of trace message types
-#[derive(Debug, PartialEq, Clone, Serialize)]
+#[cfg_attr(
+    feature = "serde-support",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub enum ApplicationTraceType {
     Variable,
@@ -376,7 +411,11 @@ impl AsRef<str> for ApplicationTraceType {
 ///
 /// In case the dlt message contains networking information,
 /// the Trace-Type indicates different kinds of network message types
-#[derive(Debug, PartialEq, Clone, Serialize)]
+#[cfg_attr(
+    feature = "serde-support",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub enum NetworkTraceType {
     Ipc,
@@ -415,7 +454,11 @@ const CTRL_TYPE_RESPONSE: u8 = 0x2;
 ///
 /// In case the dlt message contains control information,
 /// the Trace-Type indicates different kinds of control message types
-#[derive(Debug, PartialEq, Clone, Serialize)]
+#[cfg_attr(
+    feature = "serde-support",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub enum ControlType {
     Request,  // represented by 0x1
@@ -452,7 +495,11 @@ impl ControlType {
 }
 
 /// Part of the extended header, distinguishes log, trace and controll messages
-#[derive(Debug, PartialEq, Clone, Serialize)]
+#[cfg_attr(
+    feature = "serde-support",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub enum MessageType {
     Log(LogLevel),
@@ -509,7 +556,11 @@ impl ExtendedHeader {
 
 /// Fixed-Point representation. only supports 32 bit and 64 bit values
 /// according to the spec 128 bit are possible but we don't support it
-#[derive(Debug, PartialEq, Clone, Serialize)]
+#[cfg_attr(
+    feature = "serde-support",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub enum FixedPointValue {
     I32(i32),
@@ -524,7 +575,11 @@ pub(crate) fn fixed_point_value_width(v: &FixedPointValue) -> usize {
 }
 
 /// Represents the value of an DLT argument
-#[derive(Debug, PartialEq, Clone, Serialize)]
+#[cfg_attr(
+    feature = "serde-support",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Value {
     Bool(u8),
     U8(u8),
@@ -545,7 +600,11 @@ pub enum Value {
 
 /// Defines what string type is used, `ASCII` or `UTF8`
 #[allow(clippy::upper_case_acronyms)]
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "serde-support",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub enum StringCoding {
     ASCII,
@@ -558,7 +617,11 @@ pub enum StringCoding {
 }
 
 /// Represents the bit width of a floatingpoint value type
-#[derive(Debug, Clone, PartialEq, Copy, Serialize)]
+#[cfg_attr(
+    feature = "serde-support",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub enum FloatWidth {
     Width32 = 32,
@@ -573,7 +636,11 @@ pub(crate) fn float_width_to_type_length(width: FloatWidth) -> TypeLength {
 }
 
 /// Represents the bit width of a value type
-#[derive(Debug, Clone, PartialEq, Copy, Serialize)]
+#[cfg_attr(
+    feature = "serde-support",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub enum TypeLength {
     BitLength8 = 8,
@@ -607,7 +674,11 @@ impl TypeLength {
 /// Part of the TypeInfo that specifies what kind of type is encoded
 ///
 /// the Array type is not yet supported and honestly I never saw anyone using it
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "serde-support",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub enum TypeInfoKind {
     Bool,
@@ -650,7 +721,11 @@ pub enum TypeInfoKind {
 /// field with the text (of name or unit). The length field contains the
 /// number of characters of the associated name or unit filed. The unit
 /// information is to add only in some data types.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "serde-support",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub struct TypeInfo {
     pub kind: TypeInfoKind,
@@ -832,7 +907,11 @@ impl TryFrom<u32> for TypeInfo {
 ///     * i32 bit if Type Length (TYLE) equals 1,2 or 3
 ///     * i64 bit if Type Length (TYLE) equals 4
 ///     * i128 bit if Type Length (TYLE) equals 5 (unsupported)
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "serde-support",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FixedPoint {
     pub quantization: f32,
     pub offset: FixedPointValue,
@@ -845,7 +924,11 @@ pub struct FixedPoint {
 /// information of an application). In addition to the variable value
 /// itself, it is needed to provide information like size and type
 /// of the variable. This information is contained in the `type_info` field.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "serde-support",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Argument {
     pub type_info: TypeInfo,
     pub name: Option<String>,
@@ -1442,7 +1525,11 @@ fn payload_content_len(content: &PayloadContent) -> usize {
 }
 
 /// Configuration options for the extended header
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "serde-support",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ExtendedHeaderConfig {
     pub message_type: MessageType,
     pub app_id: String,
@@ -1450,7 +1537,11 @@ pub struct ExtendedHeaderConfig {
 }
 
 /// Configuration options for a DLT message, used when constructing a message
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "serde-support",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MessageConfig {
     pub version: u8,
     pub counter: u8,

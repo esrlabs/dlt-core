@@ -22,7 +22,6 @@ use quick_xml::{
     },
     Reader as XmlReader,
 };
-use serde::{Deserialize, Serialize};
 use std::{
     collections::{hash_map::Entry, HashMap},
     fs::File,
@@ -53,7 +52,11 @@ pub enum Error {
 }
 
 /// Contains all the paths of fibex files that should be combined into the model
-#[derive(Serialize, Deserialize, Debug)]
+#[cfg_attr(
+    feature = "serde-support",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Debug)]
 pub struct FibexConfig {
     pub fibex_file_paths: Vec<String>,
 }
