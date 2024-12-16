@@ -94,10 +94,13 @@ impl From<&DltFilterConfig> for ProcessedDltFilterConfig {
     }
 }
 
-// /// Read filter config from a json file
-// pub fn read_filter_options(f: &mut fs::File) -> Option<DltFilterConfig> {
-//     let mut contents = String::new();
-//     f.read_to_string(&mut contents)
-//         .ok()
-//         .and_then(|_| serde_json::from_str(&contents[..]).ok())
-// }
+/// Read filter config from a json file. Available only with feature "serde-support"
+#[cfg(feature = "serde-support")]
+pub fn read_filter_options(f: &mut std::fs::File) -> Option<DltFilterConfig> {
+    use std::io::Read;
+
+    let mut contents = String::new();
+    f.read_to_string(&mut contents)
+        .ok()
+        .and_then(|_| serde_json::from_str(&contents[..]).ok())
+}
