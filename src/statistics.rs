@@ -21,7 +21,6 @@ use crate::{
 use buf_redux::{policy::MinBuffered, BufReader as ReduxReader};
 use nom::bytes::streaming::take;
 use rustc_hash::FxHashMap;
-use serde::Serialize;
 use std::{
     fs,
     io::{BufRead, Read},
@@ -91,7 +90,11 @@ pub fn dlt_statistic_row_info(
 }
 
 /// Shows how many messages per log level where found
-#[derive(Serialize, Debug, Default, Clone)]
+#[cfg_attr(
+    feature = "serde-support",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Debug, Default, Clone)]
 pub struct LevelDistribution {
     pub non_log: usize,
     pub log_fatal: usize,
@@ -158,7 +161,11 @@ type IdMap = FxHashMap<String, LevelDistribution>;
 
 /// Includes the `LevelDistribution` for all `app-ids`, `context-ids` and
 /// `ecu_ids`
-#[derive(Serialize, Debug)]
+#[cfg_attr(
+    feature = "serde-support",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Debug)]
 pub struct StatisticInfo {
     pub app_ids: Vec<(String, LevelDistribution)>,
     pub context_ids: Vec<(String, LevelDistribution)>,
@@ -205,7 +212,11 @@ impl Default for StatisticInfo {
 }
 
 /// Stats about a row in a DLT file
-#[derive(Serialize, Debug)]
+#[cfg_attr(
+    feature = "serde-support",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Debug)]
 pub struct StatisticRowInfo {
     pub app_id_context_id: Option<(String, String)>,
     pub ecu_id: Option<String>,

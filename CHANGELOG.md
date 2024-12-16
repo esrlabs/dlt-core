@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0] - 2024-12-18
+### Changed
+- Add feature "serde-support", which adds to crate's types Serialize/Deserialize
+
 ## [0.17.0] - 2024-10-04
 ### Changed
 - breaking change in API: Remove `nom` crate types from the return types of parsing functions. 

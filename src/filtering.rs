@@ -12,8 +12,7 @@
 
 //! # filter definitions for filtering dlt messages
 use crate::dlt;
-use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, fs, io::Read, iter::FromIterator};
+use std::{collections::HashSet, iter::FromIterator};
 
 /// Describes what DLT message to filter out based on log-level and app/ecu/context-id
 ///
@@ -23,7 +22,11 @@ use std::{collections::HashSet, fs, io::Read, iter::FromIterator};
 ///
 /// only this is possible:
 /// - `app-id is_one_of ["abc","foo"] AND log-level <= DEBUG`
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(
+    feature = "serde-support",
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[derive(Debug, Clone)]
 pub struct DltFilterConfig {
     /// only select log entries with level MIN_LEVEL and more severe
     ///
@@ -91,10 +94,10 @@ impl From<&DltFilterConfig> for ProcessedDltFilterConfig {
     }
 }
 
-/// Read filter config from a json file
-pub fn read_filter_options(f: &mut fs::File) -> Option<DltFilterConfig> {
-    let mut contents = String::new();
-    f.read_to_string(&mut contents)
-        .ok()
-        .and_then(|_| serde_json::from_str(&contents[..]).ok())
-}
+// /// Read filter config from a json file
+// pub fn read_filter_options(f: &mut fs::File) -> Option<DltFilterConfig> {
+//     let mut contents = String::new();
+//     f.read_to_string(&mut contents)
+//         .ok()
+//         .and_then(|_| serde_json::from_str(&contents[..]).ok())
+// }
