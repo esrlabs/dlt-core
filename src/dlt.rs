@@ -65,7 +65,7 @@ pub struct Message {
     pub payload: PayloadContent,
 }
 
-/// Add some stupid docs
+/// Storage header is used in case of dlt entries stored in file
 #[cfg_attr(
     feature = "serde-support",
     derive(serde::Serialize, serde::Deserialize)
