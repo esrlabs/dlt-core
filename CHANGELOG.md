@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.1] - 2025-01-31
+### Changed
+- Cleanup license headers (GH-issue #13)
+- Remove legacy rakefile (GH-issue #29)
+
 ## [0.18.0] - 2024-12-18
 ### Changed
 - Add feature "serde-support", which adds to crate's types Serialize/Deserialize
