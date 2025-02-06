@@ -63,7 +63,7 @@ fn main() {
 
 The parser is quite fast. Parsing a 4.8 GByte DLT file that contains over 3.5 mio messages took ~37 seconds (~134MB/sec)
 
-This example can be built with `cargo build --example file_parser --release`
+This example can be built with `cargo run --example file_parser --release`
 
 ```rust
 ...

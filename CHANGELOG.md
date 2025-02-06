@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.1] - 2025-02-06
+### Changed
+- Made examples build and run via cargo
+
 ## [0.19.0] - 2025-02-06
 ### Changed
 - Made fibex parsing a separate feature
