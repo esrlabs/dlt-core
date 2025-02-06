@@ -14,6 +14,7 @@
 #[macro_use]
 mod dlt_tests;
 mod dlt_parse_tests;
+#[cfg(feature = "fibex_parser")]
 mod fibex_tests;
 #[cfg(feature = "statistics")]
 mod statistics_tests;

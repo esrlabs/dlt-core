@@ -137,6 +137,8 @@ Below is the revised and improved English version of the documentation:
 
 - **`statistics`**: Enables the `statistics` module, which scans the source data and provides a summary of its contents. This gives you an overview of the number of messages and their content.
 
+- **`fibex_parser`**: Enables the `fibex` module, which allows to parse configurations for non-verbose messages from a fibex model.
+
 - **`debug_parser`**: Adds additional log output for debugging purposes.
 
 - **`serde-support`**: Adds `Serialize` and `Deserialize` implementations (via `serde`) to all public types. This feature is useful if you need to encode or decode these types for transmission or storage.
