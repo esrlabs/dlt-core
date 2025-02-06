@@ -20,6 +20,7 @@
 extern crate log;
 
 pub mod dlt;
+#[cfg(feature = "fibex_parser")]
 pub mod fibex;
 pub mod filtering;
 pub mod parse;
