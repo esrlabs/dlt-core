@@ -155,3 +155,16 @@ Below is the revised and improved English version of the documentation:
 * **`debug_parser`**: Adds additional log output for debugging purposes.
 
 * **`serde-support`**: Adds `Serialize` and `Deserialize` implementations (via `serde`) to all public types. This feature is useful if you need to encode or decode these types for transmission or storage.
+
+## Used By
+
+### Fast DLT Log Viewing with chipmunk
+
+[**chipmunk**](https://github.com/esrlabs/chipmunk) is a cross-platform log viewer that integrates **dlt-core** for lightning-fast parsing and display of DLT log files. With chipmunk, you can:
+
+- Instantly search and filter log entries  
+- Highlight and save specific patterns  
+- Efficiently handle large log files without sacrificing performance
+- Inspect (export and view) DLT attachments  
+
+If you’re looking for a user-friendly way to work with large DLT logs, give [**chipmunk**](https://github.com/esrlabs/chipmunk) a try!
