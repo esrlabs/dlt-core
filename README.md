@@ -156,7 +156,7 @@ Below is the revised and improved English version of the documentation:
 
 * **`serde-support`**: Adds `Serialize` and `Deserialize` implementations (via `serde`) to all public types. This feature is useful if you need to encode or decode these types for transmission or storage.
 
-## Used By
+## Example users
 
 ### Fast DLT Log Viewing with chipmunk
 
