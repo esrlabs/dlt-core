@@ -61,12 +61,21 @@ fn main() {
 }
 ```
 
-The parser is quite fast. Parsing a 4.8 GByte DLT file that contains over 3.5 mio messages took ~37 seconds (~134MB/sec)
+## Parser in action
 
-This example can be built with `cargo run --example file_parser --release`
+The parser is quite fast. Parsing a 4.8 GByte DLT file that contains over 3.5 mio messages took ~12 seconds (~409 MB/sec)
 
+The following example can be run with `cargo run --example file_parser --release sample.dlt`
+
+<!-- example start -->
 ```rust
-...
+use buf_redux::{policy::MinBuffered, BufReader};
+use dlt_core::parse::{dlt_message, DltParseError};
+use std::{env, fs, fs::File, io::BufRead, path::PathBuf, time::Instant};
+
+const BIN_READER_CAPACITY: usize = 10 * 1024 * 1024;
+const BIN_MIN_BUFFER_SPACE: usize = 10 * 1024;
+
 fn main() {
     // collect input file details
     let dlt_file_path = PathBuf::from(&env::args().nth(1).expect("No filename given"));
@@ -124,21 +133,25 @@ fn main() {
         parsed, duration_in_s, amount_per_second
     );
 }
-```
 
 ```
+<!-- example end -->
+
+```
+
 empty content after 33554430 parsed messages
-parsing 33554430 messages took 37.015s! (133.773 MB/s)
+parsing 33554430 messages took 12.117s! (408.651 MB/s)
+
 ```
 
 Below is the revised and improved English version of the documentation:
 
 ## Crate's Features
 
-- **`statistics`**: Enables the `statistics` module, which scans the source data and provides a summary of its contents. This gives you an overview of the number of messages and their content.
+* **`statistics`**: Enables the `statistics` module, which scans the source data and provides a summary of its contents. This gives you an overview of the number of messages and their content.
 
-- **`fibex_parser`**: Enables the `fibex` module, which allows to parse configurations for non-verbose messages from a fibex model.
+* **`fibex_parser`**: Enables the `fibex` module, which allows to parse configurations for non-verbose messages from a fibex model.
 
-- **`debug_parser`**: Adds additional log output for debugging purposes.
+* **`debug_parser`**: Adds additional log output for debugging purposes.
 
-- **`serde-support`**: Adds `Serialize` and `Deserialize` implementations (via `serde`) to all public types. This feature is useful if you need to encode or decode these types for transmission or storage.
+* **`serde-support`**: Adds `Serialize` and `Deserialize` implementations (via `serde`) to all public types. This feature is useful if you need to encode or decode these types for transmission or storage.
