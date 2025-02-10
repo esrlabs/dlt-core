@@ -24,6 +24,7 @@ pub mod dlt;
 pub mod fibex;
 pub mod filtering;
 pub mod parse;
+
 #[cfg(not(tarpaulin_include))]
 pub mod service_id;
 #[cfg(not(tarpaulin_include))]
