@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0] - 2025-02-11
+
+### Added
+
+- Support parsing of DLT messages from streams
+
+### Changed
+
+- Cleanup feature names
+
 ## [0.19.2] - 2025-02-06
 
 ### Changed
@@ -36,7 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Add feature "serde-support", which adds to crate's types Serialize/Deserialize
+- Add feature "serialization", which adds to crate's types Serialize/Deserialize
 
 ## [0.17.0] - 2024-10-04
 

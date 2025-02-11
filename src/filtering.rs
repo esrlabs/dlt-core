@@ -25,7 +25,7 @@ use std::{collections::HashSet, iter::FromIterator};
 /// only this is possible:
 /// - `app-id is_one_of ["abc","foo"] AND log-level <= DEBUG`
 #[cfg_attr(
-    feature = "serde-support",
+    feature = "serialization",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, Clone)]
@@ -96,8 +96,8 @@ impl From<&DltFilterConfig> for ProcessedDltFilterConfig {
     }
 }
 
-/// Read filter config from a json file. Available only with feature "serde-support"
-#[cfg(feature = "serde-support")]
+/// Read filter config from a json file. Available only with feature "serialization"
+#[cfg(feature = "serialization")]
 pub fn read_filter_options(f: &mut std::fs::File) -> Option<DltFilterConfig> {
     use std::io::Read;
 

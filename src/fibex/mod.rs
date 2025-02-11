@@ -55,7 +55,7 @@ pub enum Error {
 
 /// Contains all the paths of fibex files that should be combined into the model
 #[cfg_attr(
-    feature = "serde-support",
+    feature = "serialization",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug)]
