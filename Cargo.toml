@@ -1,6 +1,6 @@
 [package]
 name = "dlt-core"
-version = "0.19.1"
+version = "0.19.2"
 authors = ["esrlabs.com"]
 edition = "2021"
 description = """
@@ -24,13 +24,10 @@ thiserror = "1.0"
 
 [features]
 default = []
-statistics = [ "buf_redux", "rustc-hash" ]
-fibex_parser = [ "quick-xml" ]
+statistics = ["buf_redux", "rustc-hash"]
+fibex_parser = ["quick-xml"]
 debug_parser = []
-serde-support = [
-    "serde",
-    "serde_json"
-]
+serde-support = ["serde", "serde_json"]
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin_include)'] }
