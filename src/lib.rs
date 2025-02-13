@@ -20,7 +20,7 @@
 extern crate log;
 
 pub mod dlt;
-#[cfg(feature = "fibex_parser")]
+#[cfg(feature = "fibex")]
 pub mod fibex;
 pub mod filtering;
 pub mod parse;
@@ -30,6 +30,9 @@ pub mod service_id;
 #[cfg(not(tarpaulin_include))]
 #[cfg(feature = "statistics")]
 pub mod statistics;
+#[cfg(not(tarpaulin_include))]
+#[cfg(feature = "stream")]
+pub mod stream;
 
 #[cfg(test)]
 pub mod proptest_strategies;

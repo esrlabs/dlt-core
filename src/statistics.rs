@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # rapidly gather statistics info of a dlt source
+//! # Rapidly gather statistics info of a dlt source
 use crate::{
     dlt::{LogLevel, MessageType},
     parse::{
@@ -93,7 +93,7 @@ pub fn dlt_statistic_row_info(
 
 /// Shows how many messages per log level where found
 #[cfg_attr(
-    feature = "serde-support",
+    feature = "serialization",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, Default, Clone)]
@@ -164,7 +164,7 @@ type IdMap = FxHashMap<String, LevelDistribution>;
 /// Includes the `LevelDistribution` for all `app-ids`, `context-ids` and
 /// `ecu_ids`
 #[cfg_attr(
-    feature = "serde-support",
+    feature = "serialization",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug)]
@@ -215,7 +215,7 @@ impl Default for StatisticInfo {
 
 /// Stats about a row in a DLT file
 #[cfg_attr(
-    feature = "serde-support",
+    feature = "serialization",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug)]

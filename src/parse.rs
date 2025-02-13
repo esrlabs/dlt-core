@@ -747,7 +747,7 @@ fn dlt_payload<T: NomByteOrder>(
 
 #[inline]
 fn dbg_parsed<T: std::fmt::Debug>(_name: &str, _before: &[u8], _after: &[u8], _value: &T) {
-    // #[cfg(feature = "debug_parser")]
+    // #[cfg(feature = "debug")]
     {
         let input_len = _before.len();
         let now_len = _after.len();
