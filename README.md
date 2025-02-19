@@ -18,7 +18,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-dlt_core = "0.19"
+dlt_core = "0.20"
 ```
 
 This is an example of how to parse a message and serialize it back to a byte array.
@@ -69,68 +69,28 @@ The following example can be run with `cargo run --example file_parser --release
 
 <!-- example start -->
 ```rust
-use buf_redux::{policy::MinBuffered, BufReader};
-use dlt_core::parse::{dlt_message, DltParseError};
-use std::{env, fs, fs::File, io::BufRead, path::PathBuf, time::Instant};
-
-const BIN_READER_CAPACITY: usize = 10 * 1024 * 1024;
-const BIN_MIN_BUFFER_SPACE: usize = 10 * 1024;
+use dlt_core::read::{read_message, DltMessageReader};
+use std::{env, fs, fs::File, path::PathBuf, time::Instant};
 
 fn main() {
     // collect input file details
-    let dlt_file_path = PathBuf::from(&env::args().nth(1).expect("No filename given"));
-    let dlt_file = File::open(&dlt_file_path).expect("could not open file");
-    let source_file_size = fs::metadata(&dlt_file_path).expect("file size error").len();
-    // create a reader that maintains a minimum amount of bytes in it's buffer
-    let mut reader = BufReader::with_capacity(BIN_READER_CAPACITY, dlt_file)
-        .set_policy(MinBuffered(BIN_MIN_BUFFER_SPACE));
+    let dlt_file_path = PathBuf::from(&env::args().nth(1).expect("no filename given"));
+    let dlt_file = File::open(&dlt_file_path).expect("open input file");
+    let dlt_file_size = fs::metadata(&dlt_file_path).expect("file size error").len();
     // now parse all file content
-    let mut parsed = 0usize;
+    let mut dlt_reader = DltMessageReader::new(dlt_file, true);
+    let mut message_count = 0usize;
     let start = Instant::now();
-    loop {
-        let consumed: usize = match reader.fill_buf() {
-            Ok(content) => {
-                if content.is_empty() {
-                    println!("empty content after {} parsed messages", parsed);
-                    break;
-                }
-                let available = content.len();
-
-                match dlt_message(content, None, true) {
-                    Ok((rest, _maybe_msg)) => {
-                        let consumed = available - rest.len();
-                        parsed += 1;
-                        consumed
-                    }
-                    Err(DltParseError::IncompleteParse { needed }) => {
-                        println!("parse incomplete, needed: {:?}", needed);
-                        return;
-                    }
-                    Err(DltParseError::ParsingHickup(reason)) => {
-                        println!("parse error: {}", reason);
-                        4 //skip 4 bytes
-                    }
-                    Err(DltParseError::Unrecoverable(cause)) => {
-                        println!("unrecoverable parse failure: {}", cause);
-                        return;
-                    }
-                }
-            }
-            Err(e) => {
-                println!("Error reading: {}", e);
-                return;
-            }
-        };
-        reader.consume(consumed);
+    while let Some(_message) = read_message(&mut dlt_reader, None).expect("read dlt message") {
+        message_count += 1;
     }
-
     // print some stats
     let duration_in_s = start.elapsed().as_millis() as f64 / 1000.0;
-    let file_size_in_mb = source_file_size as f64 / 1024.0 / 1024.0;
+    let file_size_in_mb = dlt_file_size as f64 / 1024.0 / 1024.0;
     let amount_per_second: f64 = file_size_in_mb / duration_in_s;
     println!(
         "parsing {} messages took {:.3}s! ({:.3} MB/s)",
-        parsed, duration_in_s, amount_per_second
+        message_count, duration_in_s, amount_per_second
     );
 }
 
@@ -150,11 +110,13 @@ Below is the revised and improved English version of the documentation:
 
 * **`statistics`**: Enables the `statistics` module, which scans the source data and provides a summary of its contents. This gives you an overview of the number of messages and their content.
 
-* **`fibex_parser`**: Enables the `fibex` module, which allows to parse configurations for non-verbose messages from a fibex model.
+* **`fibex`**: Enables the `fibex` module, which allows to parse configurations for non-verbose messages from a fibex model.
 
-* **`debug_parser`**: Adds additional log output for debugging purposes.
+* **`debug`**: Adds additional log output for debugging purposes.
 
-* **`serde-support`**: Adds `Serialize` and `Deserialize` implementations (via `serde`) to all public types. This feature is useful if you need to encode or decode these types for transmission or storage.
+* **`serialization`**: Adds `Serialize` and `Deserialize` implementations (via `serde`) to all public types. This feature is useful if you need to encode or decode these types for transmission or storage.
+
+* **`stream`**: Provides API for parsing DLT messages from streams.
 
 ## Example users
 

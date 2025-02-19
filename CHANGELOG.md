@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0] - 2025-02-25
+
+### Added
+
+- API to read DLT messages from a source
+- API to read DLT messages from a stream
+- API to collect generic DLT statistics
+
+### Changed
+
+- Removed buf_redux dependency
+- Cleanup feature names
+
 ## [0.19.2] - 2025-02-06
 
 ### Changed

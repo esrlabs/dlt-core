@@ -15,7 +15,7 @@
 mod tests {
     use crate::{
         dlt::LogLevel,
-        statistics::{LevelDistribution, StatisticInfo},
+        statistics::common::{LevelDistribution, StatisticInfo},
     };
 
     fn get_stat_entities() -> Vec<(String, LevelDistribution)> {
