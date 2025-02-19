@@ -747,7 +747,7 @@ fn dlt_payload<T: NomByteOrder>(
 
 #[inline]
 fn dbg_parsed<T: std::fmt::Debug>(_name: &str, _before: &[u8], _after: &[u8], _value: &T) {
-    // #[cfg(feature = "debug_parser")]
+    // #[cfg(feature = "debug")]
     {
         let input_len = _before.len();
         let now_len = _after.len();
@@ -794,7 +794,7 @@ pub enum ParsedMessage {
 ///
 /// 3500001F 45435500 3F88623A 16014150 5000434F 4E001100 00000472 656D6F (31 byte)
 /// --------------------------------------------
-/// <HEADER>: 35 00 001F 45435500 3F88623A
+/// `<HEADER>: 35 00 001F 45435500 3F88623A`
 ///   header type = 0x35 = 0b0011 0101
 ///       UEH: 1 - > using extended header
 ///       MSBF: 0 - > little endian
@@ -806,7 +806,7 @@ pub enum ParsedMessage {
 ///   ecu-id = 45435500 = "ECU "
 ///   timestamp = 3F88623A = 106590265.0 ms since ECU startup (~30 h)
 /// --------------------------------------------
-/// <EXTENDED HEADER>: 16014150 5000434F 4E00
+/// `<EXTENDED HEADER>: 16014150 5000434F 4E00`
 ///   message-info MSIN = 0x16 = 0b0001 0110
 ///   0 -> non-verbose
 ///   011 (MSTP Message Type) = 0x3 = Dlt Control Message
@@ -985,21 +985,6 @@ pub(crate) fn validated_payload_length(
     }
     let payload_length = message_length - headers_length;
     Ok(payload_length)
-}
-
-#[cfg(feature = "statistics")]
-pub(crate) fn skip_till_after_next_storage_header(
-    input: &[u8],
-) -> Result<(&[u8], u64), DltParseError> {
-    match forward_to_next_storage_header(input) {
-        Some((consumed, rest)) => {
-            let (after_storage_header, skipped_bytes) = skip_storage_header(rest)?;
-            Ok((after_storage_header, consumed + skipped_bytes))
-        }
-        None => Err(DltParseError::ParsingHickup(
-            "did not find another storage header".into(),
-        )),
-    }
 }
 
 #[allow(clippy::useless_conversion)]
@@ -1239,4 +1224,10 @@ pub fn construct_arguments(
         arguments.push(argument);
     }
     Ok(arguments)
+}
+
+/// Parse the DLT message length from a slice containing a DLT standard header.
+pub(crate) fn parse_length(input: &[u8]) -> IResult<&[u8], u16, DltParseError> {
+    let (rest, (_, length)) = tuple((take(2usize), be_u16))(input)?;
+    Ok((rest, length))
 }

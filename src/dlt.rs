@@ -42,7 +42,7 @@ pub enum Error {
 
 /// Used to express the byte order of DLT data type fields
 #[cfg_attr(
-    feature = "serde-support",
+    feature = "serialization",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord)]
@@ -56,7 +56,7 @@ pub enum Endianness {
 
 /// represents a DLT message including all headers
 #[cfg_attr(
-    feature = "serde-support",
+    feature = "serialization",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, Clone, PartialEq)]
@@ -69,7 +69,7 @@ pub struct Message {
 
 /// Storage header is used in case of dlt entries stored in file
 #[cfg_attr(
-    feature = "serde-support",
+    feature = "serialization",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, Clone, PartialEq)]
@@ -82,7 +82,7 @@ pub struct StorageHeader {
 
 /// The Standard Header shall be in big endian format
 #[cfg_attr(
-    feature = "serde-support",
+    feature = "serialization",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, Clone, PartialEq)]
@@ -107,7 +107,7 @@ pub struct StandardHeader {
 ///
 /// The Extended Header shall be in big endian format
 #[cfg_attr(
-    feature = "serde-support",
+    feature = "serialization",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, Clone, PartialEq)]
@@ -144,7 +144,7 @@ pub struct ExtendedHeader {
 /// and payload. The payload contains of the Service ID and the contained parameters.
 ///
 #[cfg_attr(
-    feature = "serde-support",
+    feature = "serialization",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, Clone, PartialEq)]
@@ -177,7 +177,7 @@ pub enum PayloadContent {
 }
 
 #[cfg_attr(
-    feature = "serde-support",
+    feature = "serialization",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, Clone, PartialEq)]
@@ -343,7 +343,7 @@ impl StandardHeader {
 
 /// Representation of log levels used in DLT log messages
 #[cfg_attr(
-    feature = "serde-support",
+    feature = "serialization",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, PartialEq, PartialOrd, Clone, Copy)]
@@ -378,7 +378,7 @@ impl AsRef<str> for LogLevel {
 /// In case the dlt message contains tracing information, the Trace-Type
 /// indicates different kinds of trace message types
 #[cfg_attr(
-    feature = "serde-support",
+    feature = "serialization",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, PartialEq, Clone)]
@@ -414,7 +414,7 @@ impl AsRef<str> for ApplicationTraceType {
 /// In case the dlt message contains networking information,
 /// the Trace-Type indicates different kinds of network message types
 #[cfg_attr(
-    feature = "serde-support",
+    feature = "serialization",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, PartialEq, Clone)]
@@ -457,7 +457,7 @@ const CTRL_TYPE_RESPONSE: u8 = 0x2;
 /// In case the dlt message contains control information,
 /// the Trace-Type indicates different kinds of control message types
 #[cfg_attr(
-    feature = "serde-support",
+    feature = "serialization",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, PartialEq, Clone)]
@@ -498,7 +498,7 @@ impl ControlType {
 
 /// Part of the extended header, distinguishes log, trace and controll messages
 #[cfg_attr(
-    feature = "serde-support",
+    feature = "serialization",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, PartialEq, Clone)]
@@ -559,7 +559,7 @@ impl ExtendedHeader {
 /// Fixed-Point representation. only supports 32 bit and 64 bit values
 /// according to the spec 128 bit are possible but we don't support it
 #[cfg_attr(
-    feature = "serde-support",
+    feature = "serialization",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, PartialEq, Clone)]
@@ -578,7 +578,7 @@ pub(crate) fn fixed_point_value_width(v: &FixedPointValue) -> usize {
 
 /// Represents the value of an DLT argument
 #[cfg_attr(
-    feature = "serde-support",
+    feature = "serialization",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, PartialEq, Clone)]
@@ -603,7 +603,7 @@ pub enum Value {
 /// Defines what string type is used, `ASCII` or `UTF8`
 #[allow(clippy::upper_case_acronyms)]
 #[cfg_attr(
-    feature = "serde-support",
+    feature = "serialization",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, Clone, PartialEq)]
@@ -620,7 +620,7 @@ pub enum StringCoding {
 
 /// Represents the bit width of a floatingpoint value type
 #[cfg_attr(
-    feature = "serde-support",
+    feature = "serialization",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, Clone, PartialEq, Copy)]
@@ -639,7 +639,7 @@ pub(crate) fn float_width_to_type_length(width: FloatWidth) -> TypeLength {
 
 /// Represents the bit width of a value type
 #[cfg_attr(
-    feature = "serde-support",
+    feature = "serialization",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, Clone, PartialEq, Copy)]
@@ -677,7 +677,7 @@ impl TypeLength {
 ///
 /// the Array type is not yet supported and honestly I never saw anyone using it
 #[cfg_attr(
-    feature = "serde-support",
+    feature = "serialization",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, Clone, PartialEq)]
@@ -724,7 +724,7 @@ pub enum TypeInfoKind {
 /// number of characters of the associated name or unit filed. The unit
 /// information is to add only in some data types.
 #[cfg_attr(
-    feature = "serde-support",
+    feature = "serialization",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, Clone, PartialEq)]
@@ -910,7 +910,7 @@ impl TryFrom<u32> for TypeInfo {
 ///     * i64 bit if Type Length (TYLE) equals 4
 ///     * i128 bit if Type Length (TYLE) equals 5 (unsupported)
 #[cfg_attr(
-    feature = "serde-support",
+    feature = "serialization",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, Clone, PartialEq)]
@@ -927,7 +927,7 @@ pub struct FixedPoint {
 /// itself, it is needed to provide information like size and type
 /// of the variable. This information is contained in the `type_info` field.
 #[cfg_attr(
-    feature = "serde-support",
+    feature = "serialization",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, Clone, PartialEq)]
@@ -1528,7 +1528,7 @@ fn payload_content_len(content: &PayloadContent) -> usize {
 
 /// Configuration options for the extended header
 #[cfg_attr(
-    feature = "serde-support",
+    feature = "serialization",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, Clone, PartialEq)]
@@ -1540,7 +1540,7 @@ pub struct ExtendedHeaderConfig {
 
 /// Configuration options for a DLT message, used when constructing a message
 #[cfg_attr(
-    feature = "serde-support",
+    feature = "serialization",
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, Clone, PartialEq)]
@@ -1557,7 +1557,7 @@ pub struct MessageConfig {
 
 #[inline]
 fn dbg_bytes_with_info(_name: &str, _bytes: &[u8], _info: Option<&str>) {
-    #[cfg(feature = "debug_parser")]
+    #[cfg(feature = "debug")]
     {
         trace!(
             "writing {}: {} {:02X?} {}",

@@ -14,416 +14,339 @@
 
 //! # rapidly gather statistics info of a dlt source
 use crate::{
-    dlt::{LogLevel, MessageType},
-    parse::{
-        dlt_consume_msg, dlt_extended_header, dlt_standard_header,
-        skip_till_after_next_storage_header, validated_payload_length, DltParseError,
-    },
+    dlt::{ExtendedHeader, LogLevel, MessageType, StandardHeader, StorageHeader},
+    parse::{dlt_extended_header, dlt_standard_header, dlt_storage_header, DltParseError},
+    read::DltMessageReader,
 };
-use buf_redux::{policy::MinBuffered, BufReader as ReduxReader};
-use nom::bytes::streaming::take;
-use rustc_hash::FxHashMap;
-use std::{
-    fs,
-    io::{BufRead, Read},
-    path::Path,
-};
+use std::io::Read;
 
-pub(crate) const BIN_READER_CAPACITY: usize = 10 * 1024 * 1024;
-pub(crate) const BIN_MIN_BUFFER_SPACE: usize = 10 * 1024;
-
-/// Parse out the `StatisticRowInfo` for the next DLT message in a byte array
-pub fn dlt_statistic_row_info(
-    input: &[u8],
-    with_storage_header: bool,
-) -> Result<(&[u8], StatisticRowInfo), DltParseError> {
-    let (after_storage_header, _) = if with_storage_header {
-        skip_till_after_next_storage_header(input)?
-    } else {
-        (input, 0)
-    };
-    let (after_storage_and_normal_header, header) = dlt_standard_header(after_storage_header)?;
-
-    let payload_length = match validated_payload_length(&header, input.len()) {
-        Ok(length) => length,
-        Err(_e) => {
-            return Ok((
-                after_storage_and_normal_header,
-                StatisticRowInfo {
-                    app_id_context_id: None,
-                    ecu_id: header.ecu_id,
-                    level: None,
-                    verbose: false,
-                },
-            ));
-        }
-    };
-    if !header.has_extended_header {
-        // no app id, skip rest
-        let (after_message, _) =
-            take::<u16, &[u8], DltParseError>(payload_length)(after_storage_and_normal_header)?;
-        return Ok((
-            after_message,
-            StatisticRowInfo {
-                app_id_context_id: None,
-                ecu_id: header.ecu_id,
-                level: None,
-                verbose: false,
-            },
-        ));
-    }
-
-    let (after_headers, extended_header) = dlt_extended_header(after_storage_and_normal_header)?;
-    // skip payload
-    let (after_message, _) = take::<u16, &[u8], DltParseError>(payload_length)(after_headers)?;
-    let level = match extended_header.message_type {
-        MessageType::Log(level) => Some(level),
-        _ => None,
-    };
-    Ok((
-        after_message,
-        StatisticRowInfo {
-            app_id_context_id: Some((extended_header.application_id, extended_header.context_id)),
-            ecu_id: header.ecu_id,
-            level,
-            verbose: extended_header.verbose,
-        },
-    ))
+/// Trait for a DLT statistics collector.
+pub trait StatisticCollector {
+    fn collect_statistic(&mut self, statistic: Statistic) -> Result<(), DltParseError>;
 }
 
-/// Shows how many messages per log level where found
-#[cfg_attr(
-    feature = "serde-support",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[derive(Debug, Default, Clone)]
-pub struct LevelDistribution {
-    pub non_log: usize,
-    pub log_fatal: usize,
-    pub log_error: usize,
-    pub log_warning: usize,
-    pub log_info: usize,
-    pub log_debug: usize,
-    pub log_verbose: usize,
-    pub log_invalid: usize,
+/// Available statistics on a DLT message.
+pub struct Statistic<'a> {
+    /// The `LogLevel` of the message, if any.
+    pub log_level: Option<LogLevel>,
+    /// The `StorageHeader` of the message, if any.
+    pub storage_header: Option<StorageHeader>,
+    /// The `StandardHeader` of the message.
+    pub standard_header: StandardHeader,
+    /// The `ExtendedHeader` of the message, if any.
+    pub extended_header: Option<ExtendedHeader>,
+    /// The remaining payload of the message after all headers.
+    pub payload: &'a [u8],
+    /// Answers if the message's payload is verbose.
+    pub is_verbose: bool,
 }
 
-impl LevelDistribution {
-    pub fn new(level: Option<LogLevel>) -> LevelDistribution {
-        let all_zero = Default::default();
-        match level {
-            None => LevelDistribution {
-                non_log: 1,
-                ..all_zero
-            },
-            Some(LogLevel::Fatal) => LevelDistribution {
-                log_fatal: 1,
-                ..all_zero
-            },
-            Some(LogLevel::Error) => LevelDistribution {
-                log_error: 1,
-                ..all_zero
-            },
-            Some(LogLevel::Warn) => LevelDistribution {
-                log_warning: 1,
-                ..all_zero
-            },
-            Some(LogLevel::Info) => LevelDistribution {
-                log_info: 1,
-                ..all_zero
-            },
-            Some(LogLevel::Debug) => LevelDistribution {
-                log_debug: 1,
-                ..all_zero
-            },
-            Some(LogLevel::Verbose) => LevelDistribution {
-                log_verbose: 1,
-                ..all_zero
-            },
-            _ => LevelDistribution {
-                log_invalid: 1,
-                ..all_zero
-            },
-        }
-    }
+/// Collect DLT statistics from the given reader.
+pub fn collect_statistics<S: Read>(
+    reader: &mut DltMessageReader<S>,
+    collector: &mut impl StatisticCollector,
+) -> Result<(), DltParseError> {
+    let with_storage_header = reader.with_storage_header();
 
-    pub fn merge(&mut self, outside: &LevelDistribution) {
-        self.non_log += outside.non_log;
-        self.log_fatal += outside.log_fatal;
-        self.log_error += outside.log_error;
-        self.log_warning += outside.log_warning;
-        self.log_info += outside.log_info;
-        self.log_debug += outside.log_debug;
-        self.log_verbose += outside.log_verbose;
-        self.log_invalid += outside.log_invalid;
-    }
-}
-
-type IdMap = FxHashMap<String, LevelDistribution>;
-
-/// Includes the `LevelDistribution` for all `app-ids`, `context-ids` and
-/// `ecu_ids`
-#[cfg_attr(
-    feature = "serde-support",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[derive(Debug)]
-pub struct StatisticInfo {
-    pub app_ids: Vec<(String, LevelDistribution)>,
-    pub context_ids: Vec<(String, LevelDistribution)>,
-    pub ecu_ids: Vec<(String, LevelDistribution)>,
-    pub contained_non_verbose: bool,
-}
-
-impl StatisticInfo {
-    pub fn new() -> Self {
-        Self {
-            app_ids: vec![],
-            context_ids: vec![],
-            ecu_ids: vec![],
-            contained_non_verbose: false,
-        }
-    }
-
-    pub fn merge(&mut self, stat: StatisticInfo) {
-        StatisticInfo::merge_levels(&mut self.app_ids, stat.app_ids);
-        StatisticInfo::merge_levels(&mut self.context_ids, stat.context_ids);
-        StatisticInfo::merge_levels(&mut self.ecu_ids, stat.ecu_ids);
-        self.contained_non_verbose = self.contained_non_verbose || stat.contained_non_verbose;
-    }
-
-    fn merge_levels(
-        owner: &mut Vec<(String, LevelDistribution)>,
-        incomes: Vec<(String, LevelDistribution)>,
-    ) {
-        incomes.iter().for_each(|(income_id, income)| {
-            if let Some((_, existed)) = owner.iter_mut().find(|(owner_id, _)| owner_id == income_id)
-            {
-                existed.merge(income);
-            } else {
-                owner.push((income_id.to_owned(), income.clone()));
-            }
-        });
-    }
-}
-
-impl Default for StatisticInfo {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Stats about a row in a DLT file
-#[cfg_attr(
-    feature = "serde-support",
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[derive(Debug)]
-pub struct StatisticRowInfo {
-    pub app_id_context_id: Option<(String, String)>,
-    pub ecu_id: Option<String>,
-    pub level: Option<LogLevel>,
-    pub verbose: bool,
-}
-
-/// Read in a DLT file and collect some statistics about it
-pub fn collect_dlt_stats(in_file: &Path) -> Result<StatisticInfo, DltParseError> {
-    let f = fs::File::open(in_file)?;
-
-    let mut reader = ReduxReader::with_capacity(BIN_READER_CAPACITY, f)
-        .set_policy(MinBuffered(BIN_MIN_BUFFER_SPACE));
-
-    let mut app_ids: IdMap = FxHashMap::default();
-    let mut context_ids: IdMap = FxHashMap::default();
-    let mut ecu_ids: IdMap = FxHashMap::default();
-    let mut contained_non_verbose = false;
     loop {
-        match read_one_dlt_message_info(&mut reader, true) {
-            Ok(Some((
-                consumed,
-                StatisticRowInfo {
-                    app_id_context_id: Some((app_id, context_id)),
-                    ecu_id: ecu,
-                    level,
-                    verbose,
+        let slice = reader.next_message_slice()?;
+        if slice.is_empty() {
+            break;
+        }
+
+        let (rest_before_standard_header, storage_header) = if with_storage_header {
+            let result = dlt_storage_header(slice)?;
+            let rest = result.0;
+            let header = if let Some(header) = result.1 {
+                Some(header.0)
+            } else {
+                None
+            };
+            (rest, header)
+        } else {
+            (slice, None)
+        };
+
+        let (rest_after_standard_header, standard_header) =
+            dlt_standard_header(rest_before_standard_header)?;
+
+        let (rest_after_all_headers, extended_header, log_level, is_verbose) =
+            if standard_header.has_extended_header {
+                let result = dlt_extended_header(rest_after_standard_header)?;
+                let rest = result.0;
+                let header = result.1;
+                let level = match header.message_type {
+                    MessageType::Log(level) => Some(level),
+                    _ => None,
+                };
+                let verbose = header.verbose;
+                (rest, Some(header), level, verbose)
+            } else {
+                (rest_after_standard_header, None, None, false)
+            };
+
+        collector.collect_statistic(Statistic {
+            log_level,
+            storage_header,
+            standard_header,
+            extended_header,
+            payload: rest_after_all_headers,
+            is_verbose,
+        })?;
+    }
+
+    Ok(())
+}
+
+/// Contains the common DLT statistics.
+pub mod common {
+    use super::*;
+    use rustc_hash::FxHashMap;
+
+    type IdMap = FxHashMap<String, LevelDistribution>;
+
+    /// Collector for the `StatisticInfo` statistics.
+    #[derive(Default)]
+    pub struct StatisticInfoCollector {
+        app_ids: IdMap,
+        context_ids: IdMap,
+        ecu_ids: IdMap,
+        contained_non_verbose: bool,
+    }
+
+    impl StatisticInfoCollector {
+        /// Finalize and return the collected statistics.
+        pub fn collect(self) -> StatisticInfo {
+            StatisticInfo {
+                app_ids: self
+                    .app_ids
+                    .into_iter()
+                    .collect::<Vec<(String, LevelDistribution)>>(),
+                context_ids: self
+                    .context_ids
+                    .into_iter()
+                    .collect::<Vec<(String, LevelDistribution)>>(),
+                ecu_ids: self
+                    .ecu_ids
+                    .into_iter()
+                    .collect::<Vec<(String, LevelDistribution)>>(),
+                contained_non_verbose: self.contained_non_verbose,
+            }
+        }
+    }
+
+    impl StatisticCollector for StatisticInfoCollector {
+        fn collect_statistic(&mut self, statistic: Statistic) -> Result<(), DltParseError> {
+            let log_level = statistic.log_level;
+
+            match statistic.standard_header.ecu_id {
+                Some(id) => add_for_level(log_level, &mut self.ecu_ids, id),
+                None => add_for_level(log_level, &mut self.ecu_ids, "NONE".to_string()),
+            };
+
+            if let Some(extended_header) = statistic.extended_header {
+                add_for_level(log_level, &mut self.app_ids, extended_header.application_id);
+                add_for_level(log_level, &mut self.context_ids, extended_header.context_id);
+            }
+
+            self.contained_non_verbose = self.contained_non_verbose || !statistic.is_verbose;
+
+            Ok(())
+        }
+    }
+
+    /// Some common statistics about collected messages.
+    /// Includes the `LevelDistribution` for `app-ids`, `context-ids` and `ecu_ids`.
+    #[cfg_attr(
+        feature = "serialization",
+        derive(serde::Serialize, serde::Deserialize)
+    )]
+    #[derive(Debug)]
+    pub struct StatisticInfo {
+        pub app_ids: Vec<(String, LevelDistribution)>,
+        pub context_ids: Vec<(String, LevelDistribution)>,
+        pub ecu_ids: Vec<(String, LevelDistribution)>,
+        pub contained_non_verbose: bool,
+    }
+
+    impl StatisticInfo {
+        pub fn new() -> Self {
+            Self {
+                app_ids: vec![],
+                context_ids: vec![],
+                ecu_ids: vec![],
+                contained_non_verbose: false,
+            }
+        }
+
+        pub fn merge(&mut self, stat: StatisticInfo) {
+            StatisticInfo::merge_levels(&mut self.app_ids, stat.app_ids);
+            StatisticInfo::merge_levels(&mut self.context_ids, stat.context_ids);
+            StatisticInfo::merge_levels(&mut self.ecu_ids, stat.ecu_ids);
+            self.contained_non_verbose = self.contained_non_verbose || stat.contained_non_verbose;
+        }
+
+        fn merge_levels(
+            owner: &mut Vec<(String, LevelDistribution)>,
+            incomes: Vec<(String, LevelDistribution)>,
+        ) {
+            incomes.iter().for_each(|(income_id, income)| {
+                if let Some((_, existed)) =
+                    owner.iter_mut().find(|(owner_id, _)| owner_id == income_id)
+                {
+                    existed.merge(income);
+                } else {
+                    owner.push((income_id.to_owned(), income.clone()));
+                }
+            });
+        }
+    }
+
+    impl Default for StatisticInfo {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
+    /// Shows how many messages per log level where found
+    #[cfg_attr(
+        feature = "serialization",
+        derive(serde::Serialize, serde::Deserialize)
+    )]
+    #[derive(Debug, Default, Clone)]
+    pub struct LevelDistribution {
+        pub non_log: usize,
+        pub log_fatal: usize,
+        pub log_error: usize,
+        pub log_warning: usize,
+        pub log_info: usize,
+        pub log_debug: usize,
+        pub log_verbose: usize,
+        pub log_invalid: usize,
+    }
+
+    impl LevelDistribution {
+        pub fn new(level: Option<LogLevel>) -> LevelDistribution {
+            let all_zero = Default::default();
+            match level {
+                None => LevelDistribution {
+                    non_log: 1,
+                    ..all_zero
                 },
-            ))) => {
-                contained_non_verbose = contained_non_verbose || !verbose;
-                reader.consume(consumed as usize);
-                add_for_level(level, &mut app_ids, app_id);
-                add_for_level(level, &mut context_ids, context_id);
-                match ecu {
-                    Some(id) => add_for_level(level, &mut ecu_ids, id),
-                    None => add_for_level(level, &mut ecu_ids, "NONE".to_string()),
-                };
-            }
-            Ok(Some((
-                consumed,
-                StatisticRowInfo {
-                    app_id_context_id: None,
-                    ecu_id: ecu,
-                    level,
-                    verbose,
+                Some(LogLevel::Fatal) => LevelDistribution {
+                    log_fatal: 1,
+                    ..all_zero
                 },
-            ))) => {
-                contained_non_verbose = contained_non_verbose || !verbose;
-                reader.consume(consumed as usize);
-                add_for_level(level, &mut app_ids, "NONE".to_string());
-                add_for_level(level, &mut context_ids, "NONE".to_string());
-                match ecu {
-                    Some(id) => add_for_level(level, &mut ecu_ids, id),
-                    None => add_for_level(level, &mut ecu_ids, "NONE".to_string()),
-                };
+                Some(LogLevel::Error) => LevelDistribution {
+                    log_error: 1,
+                    ..all_zero
+                },
+                Some(LogLevel::Warn) => LevelDistribution {
+                    log_warning: 1,
+                    ..all_zero
+                },
+                Some(LogLevel::Info) => LevelDistribution {
+                    log_info: 1,
+                    ..all_zero
+                },
+                Some(LogLevel::Debug) => LevelDistribution {
+                    log_debug: 1,
+                    ..all_zero
+                },
+                Some(LogLevel::Verbose) => LevelDistribution {
+                    log_verbose: 1,
+                    ..all_zero
+                },
+                _ => LevelDistribution {
+                    log_invalid: 1,
+                    ..all_zero
+                },
             }
-            Ok(None) => {
-                break;
-            }
-            Err(e) => {
-                // we couldn't parse the message. try to skip it and find the next.
-                debug!("stats...try to skip and continue parsing: {}", e);
-                match e {
-                    DltParseError::ParsingHickup(reason) => {
-                        // we couldn't parse the message. try to skip it and find the next.
-                        reader.consume(4); // at least skip the magic DLT pattern
-                        debug!(
-                            "error parsing 1 dlt message, try to continue parsing: {}",
-                            reason
-                        );
-                    }
-                    _ => return Err(e),
-                }
-            }
+        }
+
+        pub fn merge(&mut self, outside: &LevelDistribution) {
+            self.non_log += outside.non_log;
+            self.log_fatal += outside.log_fatal;
+            self.log_error += outside.log_error;
+            self.log_warning += outside.log_warning;
+            self.log_info += outside.log_info;
+            self.log_debug += outside.log_debug;
+            self.log_verbose += outside.log_verbose;
+            self.log_invalid += outside.log_invalid;
         }
     }
-    let res = StatisticInfo {
-        app_ids: app_ids
-            .into_iter()
-            .collect::<Vec<(String, LevelDistribution)>>(),
-        context_ids: context_ids
-            .into_iter()
-            .collect::<Vec<(String, LevelDistribution)>>(),
-        ecu_ids: ecu_ids
-            .into_iter()
-            .collect::<Vec<(String, LevelDistribution)>>(),
-        contained_non_verbose,
-    };
-    Ok(res)
-}
 
-fn read_one_dlt_message_info<T: Read>(
-    reader: &mut ReduxReader<T, MinBuffered>,
-    with_storage_header: bool,
-) -> Result<Option<(u64, StatisticRowInfo)>, DltParseError> {
-    match reader.fill_buf() {
-        Ok(content) => {
-            if content.is_empty() {
-                return Ok(None);
+    fn add_for_level(level: Option<LogLevel>, ids: &mut IdMap, id: String) {
+        if let Some(n) = ids.get_mut(&id) {
+            match level {
+                Some(LogLevel::Fatal) => {
+                    n.log_fatal += 1;
+                }
+                Some(LogLevel::Error) => {
+                    n.log_error += 1;
+                }
+                Some(LogLevel::Warn) => {
+                    n.log_warning += 1;
+                }
+                Some(LogLevel::Info) => {
+                    n.log_info += 1;
+                }
+                Some(LogLevel::Debug) => {
+                    n.log_debug += 1;
+                }
+                Some(LogLevel::Verbose) => {
+                    n.log_verbose += 1;
+                }
+                Some(LogLevel::Invalid(_)) => {
+                    n.log_invalid += 1;
+                }
+                None => {
+                    n.non_log += 1;
+                }
             }
-            let available = content.len();
-            let r = dlt_statistic_row_info(content, with_storage_header)?;
-            let consumed = available - r.0.len();
-            Ok(Some((consumed as u64, r.1)))
+        } else {
+            ids.insert(id, LevelDistribution::new(level));
         }
-        Err(e) => Err(DltParseError::ParsingHickup(format!(
-            "error while parsing dlt messages: {}",
-            e
-        ))),
-    }
-}
-
-fn add_for_level(level: Option<LogLevel>, ids: &mut IdMap, id: String) {
-    if let Some(n) = ids.get_mut(&id) {
-        match level {
-            Some(LogLevel::Fatal) => {
-                *n = LevelDistribution {
-                    log_fatal: n.log_fatal + 1,
-                    ..*n
-                }
-            }
-            Some(LogLevel::Error) => {
-                *n = LevelDistribution {
-                    log_error: n.log_error + 1,
-                    ..*n
-                }
-            }
-            Some(LogLevel::Warn) => {
-                *n = LevelDistribution {
-                    log_warning: n.log_warning + 1,
-                    ..*n
-                }
-            }
-            Some(LogLevel::Info) => {
-                *n = LevelDistribution {
-                    log_info: n.log_info + 1,
-                    ..*n
-                }
-            }
-            Some(LogLevel::Debug) => {
-                *n = LevelDistribution {
-                    log_debug: n.log_debug + 1,
-                    ..*n
-                };
-            }
-            Some(LogLevel::Verbose) => {
-                *n = LevelDistribution {
-                    log_verbose: n.log_verbose + 1,
-                    ..*n
-                };
-            }
-            Some(LogLevel::Invalid(_)) => {
-                *n = LevelDistribution {
-                    log_invalid: n.log_invalid + 1,
-                    ..*n
-                };
-            }
-            None => {
-                *n = LevelDistribution {
-                    non_log: n.non_log + 1,
-                    ..*n
-                };
-            }
-        }
-    } else {
-        ids.insert(id, LevelDistribution::new(level));
     }
 }
 
-/// Count the dlt messages in a file. This assumes that messages are stored with using a `StorageHeader`
-pub fn count_dlt_messages(input: &Path) -> Result<u64, DltParseError> {
-    if input.exists() {
-        let f = fs::File::open(input)?;
+#[cfg(test)]
+mod tests {
+    use super::{common::*, *};
+    use crate::tests::{DLT_MESSAGE, DLT_MESSAGE_WITH_STORAGE_HEADER};
 
-        let mut reader = ReduxReader::with_capacity(BIN_READER_CAPACITY, f)
-            .set_policy(MinBuffered(BIN_MIN_BUFFER_SPACE));
+    #[test]
+    fn test_empty_statistics() {
+        let collector = StatisticInfoCollector::default();
+        let stats = collector.collect();
 
-        let mut msg_cnt: u64 = 0;
-        loop {
-            match reader.fill_buf() {
-                Ok(content) => {
-                    if content.is_empty() {
-                        break;
-                    }
-                    if let Ok((_rest, Some(consumed))) = dlt_consume_msg(content) {
-                        reader.consume(consumed as usize);
-                        msg_cnt += 1;
-                    } else {
-                        break;
-                    }
-                }
-                Err(e) => {
-                    trace!("no more content");
-                    return Err(DltParseError::Unrecoverable(format!(
-                        "error for filling buffer with dlt messages: {:?}",
-                        e
-                    )));
-                }
-            }
+        assert_eq!(0, stats.app_ids.len());
+        assert_eq!(0, stats.context_ids.len());
+        assert_eq!(0, stats.ecu_ids.len());
+        assert!(!stats.contained_non_verbose);
+    }
+
+    #[test]
+    fn test_collect_statistics() {
+        let messages_with_storage = [
+            (DLT_MESSAGE, false),
+            (DLT_MESSAGE_WITH_STORAGE_HEADER, true),
+        ];
+
+        for message_with_storage in &messages_with_storage {
+            let bytes = message_with_storage.0;
+            let with_storage_header = message_with_storage.1;
+
+            let mut reader = DltMessageReader::new(bytes, with_storage_header);
+            let mut collector = StatisticInfoCollector::default();
+
+            collect_statistics(&mut reader, &mut collector).expect("collect statistics");
+            let stats = collector.collect();
+
+            assert_eq!(1, stats.app_ids.len());
+            assert_eq!(1, stats.context_ids.len());
+            assert_eq!(1, stats.ecu_ids.len());
+            assert!(!stats.contained_non_verbose);
         }
-        Ok(msg_cnt)
-    } else {
-        Err(DltParseError::Unrecoverable(format!(
-            "Couldn't find dlt file: {:?}",
-            input
-        )))
     }
 }
