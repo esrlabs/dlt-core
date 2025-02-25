@@ -252,7 +252,7 @@ pub(crate) fn dlt_standard_header(input: &[u8]) -> IResult<&[u8], StandardHeader
     Ok((
         input,
         StandardHeader::new(
-            header_type_byte >> 5 & 0b111,
+            (header_type_byte >> 5) & 0b111,
             if (header_type_byte & BIG_ENDIAN_FLAG) != 0 {
                 Endianness::Big
             } else {
@@ -729,10 +729,10 @@ fn dlt_payload<T: NomByteOrder>(
             Err(e) => Err(e),
         }
     } else {
-        if input.len() < 4 {
+        if payload_length < 4 {
             return Err(nom::Err::Failure(DltParseError::ParsingHickup(format!(
                 "error, payload too short {}",
-                input.len()
+                payload_length
             ))));
         }
         match tuple((T::parse_u32, take(payload_length - 4)))(input) {
@@ -1002,6 +1002,7 @@ pub(crate) fn skip_till_after_next_storage_header(
     }
 }
 
+#[allow(clippy::useless_conversion)]
 /// Remove the storage header from the input if present
 pub fn skip_storage_header(input: &[u8]) -> Result<(&[u8], u64), DltParseError> {
     let (i, (_, _, _)): (&[u8], _) = tuple((tag("DLT"), tag(&[0x01]), take(12usize)))(input)
@@ -1015,6 +1016,7 @@ pub fn skip_storage_header(input: &[u8]) -> Result<(&[u8], u64), DltParseError> 
     }
 }
 
+#[allow(clippy::useless_conversion)]
 /// Skip one dlt message in the input stream in an efficient way
 /// pre: message to be parsed contains a storage header
 pub fn dlt_consume_msg(input: &[u8]) -> Result<(&[u8], Option<u64>), DltParseError> {

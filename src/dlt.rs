@@ -1874,10 +1874,10 @@ impl From<&MessageType> for u8 {
             {
                 u8::from(x)
             }
-            MessageType::ApplicationTrace(x) => 0x1 << 1 | u8::from(x),
-            MessageType::NetworkTrace(x) => 0x2 << 1 | u8::from(x),
-            MessageType::Control(x) => 0x3 << 1 | u8::from(x),
-            MessageType::Unknown((mstp, mtin)) => mstp << 1 | mtin << 4,
+            MessageType::ApplicationTrace(x) => (0x1 << 1) | u8::from(x),
+            MessageType::NetworkTrace(x) => (0x2 << 1) | u8::from(x),
+            MessageType::Control(x) => (0x3 << 1) | u8::from(x),
+            MessageType::Unknown((mstp, mtin)) => (mstp << 1) | (mtin << 4),
         }
     }
 }
