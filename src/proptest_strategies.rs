@@ -116,20 +116,20 @@ prop_compose! {
     }
 }
 
+pub fn messages_strat(len: usize) -> impl Strategy<Value = Vec<Message>> {
+    prop::collection::vec(message_strat(), 0..len)
+}
+
+pub fn messages_with_storage_header_strat(len: usize) -> impl Strategy<Value = Vec<Message>> {
+    prop::collection::vec(message_with_storage_header_strat(), 0..len)
+}
+
 pub fn message_with_storage_header_strat() -> impl Strategy<Value = Message> {
     let storage_header = any::<StorageHeader>();
     (message_strat(), storage_header).prop_map(|(m, storage_h)| Message {
         storage_header: Some(storage_h),
         ..m
     })
-}
-
-// pub fn messages_strat(len: usize) -> impl Strategy<Value = Vec<Message>> {
-//     prop::collection::vec(message_strat(), 0..len)
-// }
-
-pub fn stored_messages_strat(len: usize) -> impl Strategy<Value = Vec<Message>> {
-    prop::collection::vec(message_with_storage_header_strat(), 0..len)
 }
 
 fn value_strategy(info: &TypeInfo) -> impl Strategy<Value = Value> {
