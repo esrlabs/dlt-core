@@ -22,11 +22,11 @@ use bytes::{BufMut, BytesMut};
 use std::{convert::TryFrom, str};
 use thiserror::Error;
 
-#[cfg(test)]
+#[cfg(feature = "development")]
 use crate::proptest_strategies::*;
-#[cfg(test)]
+#[cfg(feature = "development")]
 use proptest::prelude::*;
-#[cfg(test)]
+#[cfg(feature = "development")]
 use proptest_derive::Arbitrary;
 
 /// Error constructing or converting DLT types
@@ -46,7 +46,7 @@ pub enum Error {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord)]
-#[cfg_attr(test, derive(Arbitrary))]
+#[cfg_attr(feature = "development", derive(Arbitrary))]
 pub enum Endianness {
     /// Little Endian
     Little,
@@ -73,10 +73,10 @@ pub struct Message {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(test, derive(Arbitrary))]
+#[cfg_attr(feature = "development", derive(Arbitrary))]
 pub struct StorageHeader {
     pub timestamp: DltTimeStamp,
-    #[cfg_attr(test, proptest(strategy = "\"[a-zA-Z 0-9]{4}\""))]
+    #[cfg_attr(feature = "development", proptest(strategy = "\"[a-zA-Z 0-9]{4}\""))]
     pub ecu_id: String,
 }
 
@@ -111,16 +111,16 @@ pub struct StandardHeader {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(test, derive(Arbitrary))]
+#[cfg_attr(feature = "development", derive(Arbitrary))]
 pub struct ExtendedHeader {
     pub verbose: bool,
-    #[cfg_attr(test, proptest(strategy = "0..=5u8"))]
+    #[cfg_attr(feature = "development", proptest(strategy = "0..=5u8"))]
     pub argument_count: u8,
     pub message_type: MessageType,
 
-    #[cfg_attr(test, proptest(strategy = "\"[a-zA-Z]{1,3}\""))]
+    #[cfg_attr(feature = "development", proptest(strategy = "\"[a-zA-Z]{1,3}\""))]
     pub application_id: String,
-    #[cfg_attr(test, proptest(strategy = "\"[a-zA-Z]{1,3}\""))]
+    #[cfg_attr(feature = "development", proptest(strategy = "\"[a-zA-Z]{1,3}\""))]
     pub context_id: String,
 }
 
@@ -148,29 +148,29 @@ pub struct ExtendedHeader {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(test, derive(Arbitrary))]
+#[cfg_attr(feature = "development", derive(Arbitrary))]
 pub enum PayloadContent {
     #[cfg_attr(
-        test,
+        feature = "development",
         proptest(strategy = "argument_vector_strategy().prop_map(PayloadContent::Verbose)")
     )]
     Verbose(Vec<Argument>),
     #[cfg_attr(
-        test,
+        feature = "development",
         proptest(
             strategy = "(0..10u32, prop::collection::vec(any::<u8>(), 0..5)).prop_map(|(a, b)| PayloadContent::NonVerbose(a,b))"
         )
     )]
     NonVerbose(u32, Vec<u8>), // (message_id, payload)
     #[cfg_attr(
-        test,
+        feature = "development",
         proptest(
             strategy = "(any::<ControlType>(), prop::collection::vec(any::<u8>(), 0..5)).prop_map(|(a, b)| PayloadContent::ControlMsg(a,b))"
         )
     )]
     ControlMsg(ControlType, Vec<u8>),
     #[cfg_attr(
-        test,
+        feature = "development",
         proptest(strategy = "vec_of_vec().prop_map(PayloadContent::NetworkTrace)")
     )]
     NetworkTrace(Vec<Vec<u8>>),
@@ -181,10 +181,10 @@ pub enum PayloadContent {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(test, derive(Arbitrary))]
+#[cfg_attr(feature = "development", derive(Arbitrary))]
 pub struct DltTimeStamp {
     pub seconds: u32,
-    #[cfg_attr(test, proptest(strategy = "0..=1_000_000u32"))]
+    #[cfg_attr(feature = "development", proptest(strategy = "0..=1_000_000u32"))]
     pub microseconds: u32,
 }
 
@@ -347,7 +347,7 @@ impl StandardHeader {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, PartialEq, PartialOrd, Clone, Copy)]
-#[cfg_attr(test, derive(Arbitrary))]
+#[cfg_attr(feature = "development", derive(Arbitrary))]
 pub enum LogLevel {
     Fatal,
     Error,
@@ -355,7 +355,10 @@ pub enum LogLevel {
     Info,
     Debug,
     Verbose,
-    #[cfg_attr(test, proptest(strategy = "(7..=15u8).prop_map(LogLevel::Invalid)"))]
+    #[cfg_attr(
+        feature = "development",
+        proptest(strategy = "(7..=15u8).prop_map(LogLevel::Invalid)")
+    )]
     Invalid(u8),
 }
 
@@ -382,7 +385,7 @@ impl AsRef<str> for LogLevel {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(test, derive(Arbitrary))]
+#[cfg_attr(feature = "development", derive(Arbitrary))]
 pub enum ApplicationTraceType {
     Variable,
     FunctionIn,
@@ -390,7 +393,7 @@ pub enum ApplicationTraceType {
     State,
     Vfb,
     #[cfg_attr(
-        test,
+        feature = "development",
         proptest(strategy = "(6..15u8).prop_map(ApplicationTraceType::Invalid)")
     )]
     Invalid(u8),
@@ -418,7 +421,7 @@ impl AsRef<str> for ApplicationTraceType {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(test, derive(Arbitrary))]
+#[cfg_attr(feature = "development", derive(Arbitrary))]
 pub enum NetworkTraceType {
     Ipc,
     Can,
@@ -428,7 +431,7 @@ pub enum NetworkTraceType {
     Someip,
     Invalid,
     #[cfg_attr(
-        test,
+        feature = "development",
         proptest(strategy = "(7..15u8).prop_map(NetworkTraceType::UserDefined)")
     )]
     UserDefined(u8),
@@ -461,11 +464,14 @@ const CTRL_TYPE_RESPONSE: u8 = 0x2;
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(test, derive(Arbitrary))]
+#[cfg_attr(feature = "development", derive(Arbitrary))]
 pub enum ControlType {
     Request,  // represented by 0x1
     Response, // represented by 0x2
-    #[cfg_attr(test, proptest(strategy = "(3..15u8).prop_map(ControlType::Unknown)"))]
+    #[cfg_attr(
+        feature = "development",
+        proptest(strategy = "(3..15u8).prop_map(ControlType::Unknown)")
+    )]
     Unknown(u8),
 }
 
@@ -502,14 +508,14 @@ impl ControlType {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(test, derive(Arbitrary))]
+#[cfg_attr(feature = "development", derive(Arbitrary))]
 pub enum MessageType {
     Log(LogLevel),
     ApplicationTrace(ApplicationTraceType),
     NetworkTrace(NetworkTraceType),
     Control(ControlType),
     #[cfg_attr(
-        test,
+        feature = "development",
         proptest(strategy = "((0b100u8..0b111u8),(0..0b1111u8)).prop_map(MessageType::Unknown)")
     )]
     Unknown((u8, u8)),
@@ -563,7 +569,7 @@ impl ExtendedHeader {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(test, derive(Arbitrary))]
+#[cfg_attr(feature = "development", derive(Arbitrary))]
 pub enum FixedPointValue {
     I32(i32),
     I64(i64),
@@ -607,12 +613,12 @@ pub enum Value {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(test, derive(Arbitrary))]
+#[cfg_attr(feature = "development", derive(Arbitrary))]
 pub enum StringCoding {
     ASCII,
     UTF8,
     #[cfg_attr(
-        test,
+        feature = "development",
         proptest(strategy = "(2..=7u8).prop_map(StringCoding::Reserved)")
     )]
     Reserved(u8),
@@ -624,7 +630,7 @@ pub enum StringCoding {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, Clone, PartialEq, Copy)]
-#[cfg_attr(test, derive(Arbitrary))]
+#[cfg_attr(feature = "development", derive(Arbitrary))]
 pub enum FloatWidth {
     Width32 = 32,
     Width64 = 64,
@@ -643,7 +649,7 @@ pub(crate) fn float_width_to_type_length(width: FloatWidth) -> TypeLength {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, Clone, PartialEq, Copy)]
-#[cfg_attr(test, derive(Arbitrary))]
+#[cfg_attr(feature = "development", derive(Arbitrary))]
 pub enum TypeLength {
     BitLength8 = 8,
     BitLength16 = 16,
@@ -681,13 +687,13 @@ impl TypeLength {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(test, derive(Arbitrary))]
+#[cfg_attr(feature = "development", derive(Arbitrary))]
 pub enum TypeInfoKind {
     Bool,
-    #[cfg_attr(test, proptest(strategy = "signed_strategy()"))]
+    #[cfg_attr(feature = "development", proptest(strategy = "signed_strategy()"))]
     Signed(TypeLength),
     SignedFixedPoint(FloatWidth),
-    #[cfg_attr(test, proptest(strategy = "unsigned_strategy()"))]
+    #[cfg_attr(feature = "development", proptest(strategy = "unsigned_strategy()"))]
     Unsigned(TypeLength),
     UnsignedFixedPoint(FloatWidth),
     Float(FloatWidth),
@@ -728,7 +734,7 @@ pub enum TypeInfoKind {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(test, derive(Arbitrary))]
+#[cfg_attr(feature = "development", derive(Arbitrary))]
 pub struct TypeInfo {
     pub kind: TypeInfoKind,
     pub coding: StringCoding,

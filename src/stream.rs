@@ -118,12 +118,14 @@ impl<S: AsyncRead + Unpin> DltStreamReader<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "development")]
+    use crate::proptest_strategies::{messages_strat, messages_with_storage_header_strat};
     use crate::{
         dlt::Message,
-        proptest_strategies::{messages_strat, messages_with_storage_header_strat},
         tests::{DLT_MESSAGE, DLT_MESSAGE_WITH_STORAGE_HEADER},
     };
     use futures::{stream, TryStreamExt};
+    #[cfg(feature = "development")]
     use proptest::prelude::*;
     use tokio::runtime::Runtime;
 
@@ -182,6 +184,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "development")]
     proptest! {
         #[test]
         fn test_read_messages_proptest(messages in messages_strat(10)) {

@@ -106,10 +106,7 @@ pub mod common {
     type IdMap = FxHashMap<String, LevelDistribution>;
 
     /// Collector for the `StatisticInfo` statistics.
-<<<<<<< HEAD
     #[derive(Default)]
-=======
->>>>>>> 73bb850 (Add support for reading DLT messages.)
     pub struct StatisticInfoCollector {
         app_ids: IdMap,
         context_ids: IdMap,
@@ -118,19 +115,6 @@ pub mod common {
     }
 
     impl StatisticInfoCollector {
-<<<<<<< HEAD
-=======
-        /// Create a new statistics collector.
-        pub fn new() -> Self {
-            StatisticInfoCollector {
-                app_ids: FxHashMap::default(),
-                context_ids: FxHashMap::default(),
-                ecu_ids: FxHashMap::default(),
-                contained_non_verbose: false,
-            }
-        }
-
->>>>>>> 73bb850 (Add support for reading DLT messages.)
         /// Finalize and return the collected statistics.
         pub fn collect(self) -> StatisticInfo {
             StatisticInfo {
@@ -354,11 +338,7 @@ mod tests {
             let with_storage_header = message_with_storage.1;
 
             let mut reader = DltMessageReader::new(bytes, with_storage_header);
-<<<<<<< HEAD
             let mut collector = StatisticInfoCollector::default();
-=======
-            let mut collector = StatisticInfoCollector::new();
->>>>>>> 73bb850 (Add support for reading DLT messages.)
 
             collect_statistics(&mut reader, &mut collector).expect("collect statistics");
             let stats = collector.collect();
