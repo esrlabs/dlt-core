@@ -1748,7 +1748,7 @@ pub(crate) fn calculate_standard_header_length(header_type: u8) -> u16 {
 
 // TODO use header struct not u8
 /// Use header type to determine the length of the all headers together
-pub(crate) fn calculate_all_headers_length(header_type: u8) -> u16 {
+pub fn calculate_all_headers_length(header_type: u8) -> u16 {
     let mut length = calculate_standard_header_length(header_type);
     if (header_type & WITH_EXTENDED_HEADER_FLAG) != 0 {
         length += EXTENDED_HEADER_LENGTH;
