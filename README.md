@@ -114,6 +114,8 @@ Below is the revised and improved English version of the documentation:
 
 * **`debug`**: Adds additional log output for debugging purposes.
 
+* **`development`**: Provides additional API for development purposes.
+
 * **`serialization`**: Adds `Serialize` and `Deserialize` implementations (via `serde`) to all public types. This feature is useful if you need to encode or decode these types for transmission or storage.
 
 * **`stream`**: Provides API for parsing DLT messages from streams.

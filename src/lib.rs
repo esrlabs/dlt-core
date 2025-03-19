@@ -34,7 +34,7 @@ pub mod service_id;
 #[cfg(feature = "statistics")]
 pub mod statistics;
 
-#[cfg(test)]
+#[cfg(feature = "development")]
 pub mod proptest_strategies;
 #[cfg(test)]
 mod tests;

@@ -16,15 +16,19 @@ mod tests {
     use crate::{
         dlt::*,
         parse::{
-            dlt_argument, dlt_consume_msg, dlt_extended_header, dlt_message, dlt_standard_header,
-            dlt_storage_header, dlt_type_info, dlt_zero_terminated_string,
+            dlt_argument, dlt_message, dlt_type_info, dlt_zero_terminated_string,
             forward_to_next_storage_header, parse_ecu_id, DltParseError, ParsedMessage,
             DLT_PATTERN,
         },
+    };
+    #[cfg(feature = "development")]
+    use crate::{
+        parse::{dlt_consume_msg, dlt_extended_header, dlt_standard_header, dlt_storage_header},
         proptest_strategies::*,
     };
     use core::num::NonZeroUsize;
     use nom::IResult;
+    #[cfg(feature = "development")]
     use proptest::prelude::*;
     use std::io::Write;
 
@@ -296,6 +300,8 @@ mod tests {
     }
 
     static VALID_ECU_ID_FORMAT: &str = "[0-9a-zA-Z]{4}";
+
+    #[cfg(feature = "development")]
     proptest! {
         #[test]
         fn parse_ecu_id_doesnt_crash(s in "\\PC*") {
@@ -328,6 +334,7 @@ mod tests {
         assert_eq!(type_info_bytes, type_info_as_bytes);
     }
 
+    #[cfg(feature = "development")]
     proptest! {
         #[test]
         fn test_dlt_all_storage_header(header_to_expect: StorageHeader) {

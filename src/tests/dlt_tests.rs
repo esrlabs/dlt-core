@@ -13,13 +13,16 @@
 // limitations under the License.
 #[cfg(test)]
 mod tests {
-    use crate::{dlt::*, proptest_strategies::argument_strategy};
+    use crate::dlt::*;
+    #[cfg(feature = "development")]
+    use crate::proptest_strategies::argument_strategy;
     use byteorder::ByteOrder;
-    use proptest::prelude::*;
-
     use byteorder::{BigEndian, LittleEndian};
     use pretty_assertions::assert_eq;
+    #[cfg(feature = "development")]
+    use proptest::prelude::*;
 
+    #[cfg(feature = "development")]
     proptest! {
         #[test]
         fn convert_type_info_to_bytes_doesnt_crash(type_info: TypeInfo) {
