@@ -1017,13 +1017,14 @@ pub fn dlt_consume_msg(input: &[u8]) -> Result<(&[u8], Option<u64>), DltParseErr
     Ok((after_message, Some(consumed)))
 }
 
-/// if the type-info for the payload arguments is proviced, this
+/// if the type-info for the payload arguments is provided, this
 /// function parses and creates the individual arguments from payload data
-pub fn construct_arguments(
+/// and returns the rest of data not yet consumed.
+pub fn construct_arguments<'b>(
     endianness: Endianness,
     pdu_signal_types: &[TypeInfo],
-    data: &[u8],
-) -> Result<Vec<Argument>, DltParseError> {
+    data: &'b [u8],
+) -> Result<(&'b [u8], Vec<Argument>), DltParseError> {
     let mut offset = 0;
     let mut arguments = vec![];
     for signal_type in pdu_signal_types {
@@ -1223,7 +1224,7 @@ pub fn construct_arguments(
         };
         arguments.push(argument);
     }
-    Ok(arguments)
+    Ok((&data[offset..], arguments))
 }
 
 /// Parse the DLT message length from a slice containing a DLT standard header.

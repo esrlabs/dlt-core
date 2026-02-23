@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.2]
+
+- Fixed construction of non-verbose DLT arguments for Frames containing multiple PDU's
+
 ## [0.20.1] - 2025-05-09
 
 ### Changed
