@@ -1,6 +1,12 @@
-use std::fs;
+// Dummy `main` to avoid triggering a panic on docs.rs' read-only file system.
+#[cfg(docsrs)]
+fn main() {}
 
+
+#[cfg(not(docsrs))]
 fn main() {
+    use std::fs;
+
     let example_path = "examples/file_parser.rs";
     let readme_path = "README.md";
 
